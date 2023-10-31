@@ -57,29 +57,16 @@ void VulkanEngine::cleanup()
 {	
 	debug("Cleaning up");
 
-	VK_CHECK(vkWaitForFences(m_device, 1, &m_render_fence, true, 1000000000));
-	VK_CHECK(vkResetCommandBuffer(m_main_cmdbuf, 0));
-
+	
 	if (m_isInitialized) {
-		vkDestroySemaphore(m_device, m_render_sem, nullptr);
-		vkDestroySemaphore(m_device, m_present_sem, nullptr);
-		vkDestroyFence(m_device, m_render_fence, nullptr);
-
-		vkDestroyCommandPool(m_device, m_cmdpool, nullptr);
-
-		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-
-		for (size_t i = 0; i < m_framebuffers.size(); ++i) {
-			vkDestroyFramebuffer(m_device, m_framebuffers[i], nullptr);
-
-			vkDestroyImageView(m_device, m_swapchain_img_views[i], nullptr);
-		}
+		VK_CHECK(vkWaitForFences(m_device, 1, &m_render_fence, true, 1000000000));
+		
+		m_main_delete_queue.flush(m_device);
 
 		vkDestroyDevice(m_device, nullptr);
 		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 		vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
 		vkDestroyInstance(m_instance, nullptr);
-		
 		SDL_DestroyWindow(m_window);
 	}
 }
@@ -223,6 +210,8 @@ void VulkanEngine::initSwapChain() {
 	m_swapchain_images = vkb_sc.get_images().value();
 	m_swapchain_img_views = vkb_sc.get_image_views().value();
 	m_swapchain_img_format = vkb_sc.image_format;
+
+	m_main_delete_queue.push(vkDestroySwapchainKHR, m_swapchain);
 }
 
 void VulkanEngine::initCommands() {
@@ -234,6 +223,7 @@ void VulkanEngine::initCommands() {
 	};
 
 	VK_CHECK(vkCreateCommandPool(m_device, &cmdpool_info, nullptr, &m_cmdpool));
+	m_main_delete_queue.push(vkDestroyCommandPool, m_cmdpool);
 
 	VkCommandBufferAllocateInfo cmdalloc_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -277,6 +267,7 @@ void VulkanEngine::initDefaultRenderPass() {
 	};
 
 	VK_CHECK(vkCreateRenderPass(m_device, &render_pass_info, nullptr, &m_render_pass));
+	m_main_delete_queue.push(vkDestroyRenderPass, m_render_pass);
 }
 
 void VulkanEngine::initFramebuffers() {
@@ -295,6 +286,9 @@ void VulkanEngine::initFramebuffers() {
 	for (size_t i = 0; i < sc_image_count; ++i) {
 		fb_info.pAttachments = &m_swapchain_img_views[i];
 		VK_CHECK(vkCreateFramebuffer(m_device, &fb_info, nullptr, &m_framebuffers[i]));
+		
+		m_main_delete_queue.push(vkDestroyFramebuffer, m_framebuffers[i]);
+		m_main_delete_queue.push(vkDestroyImageView, m_swapchain_img_views[i]);
 	}
 }
 
@@ -305,6 +299,7 @@ void VulkanEngine::initSyncStructures() {
 	};
 
 	VK_CHECK(vkCreateFence(m_device, &fence_info, nullptr, &m_render_fence));
+	m_main_delete_queue.push(vkDestroyFence, m_render_fence);
 
 	VkSemaphoreCreateInfo sem_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -312,11 +307,16 @@ void VulkanEngine::initSyncStructures() {
 
 	VK_CHECK(vkCreateSemaphore(m_device, &sem_info, nullptr, &m_present_sem));
 	VK_CHECK(vkCreateSemaphore(m_device, &sem_info, nullptr, &m_render_sem));
+	m_main_delete_queue.push(vkDestroySemaphore, m_present_sem);
+	m_main_delete_queue.push(vkDestroySemaphore, m_render_sem);
 }
 
 void VulkanEngine::initPipeline() {
 	VkShaderModule frag = loadShaderModule("../../shaders/triangle.frag.spv");
 	VkShaderModule vert = loadShaderModule("../../shaders/triangle.vert.spv");
+
+	m_main_delete_queue.push(vkDestroyShaderModule, frag);
+	m_main_delete_queue.push(vkDestroyShaderModule, vert);
 
 	if (!frag) err("could not compile fragment shader");
 	else info("compiled fragment shader");
@@ -329,6 +329,7 @@ void VulkanEngine::initPipeline() {
 	};
 
 	VK_CHECK(vkCreatePipelineLayout(m_device, &pipeline_layout_info, nullptr, &m_tri_pipeline_layout));
+	m_main_delete_queue.push(vkDestroyPipelineLayout, m_tri_pipeline_layout);
 
 	PipelineBuilder pipeline_builder = {
 		.m_vtx_input = {
@@ -384,6 +385,7 @@ void VulkanEngine::initPipeline() {
 	});
 
 	m_tri_pipeline = pipeline_builder.build(m_device, m_render_pass);
+	m_main_delete_queue.push(vkDestroyPipeline, m_tri_pipeline);
 }
 
 VkShaderModule VulkanEngine::loadShaderModule(const char *path) {
