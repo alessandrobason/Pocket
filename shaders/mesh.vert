@@ -32,7 +32,8 @@ void main() {
     //     offset.xyz, 1
     // );
 
-    out_colour = vec3(1);
+    // out_colour = vec3(1);
+    out_colour = norm;
     out_normal = norm;
     frag_pos = vec3(push_constants.model * vec4(pos, 1));
     time = push_constants.data.w;

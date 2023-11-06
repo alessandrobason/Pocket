@@ -14,6 +14,10 @@
 #include "vk_types.h"
 #include "mesh.h"
 
+constexpr uint64_t alignTo(uint64_t value, uint64_t alignment) {
+	return (value + alignment - 1) & ~(alignment - 1);
+}
+
 struct DeletionQueue {
 	std::deque<std::function<void()>> deleters;
 
@@ -52,6 +56,14 @@ struct GPUCameraData {
 	glm::mat4 viewproj;
 };
 
+struct GPUSceneData {
+	glm::vec4 fog_colour;
+	glm::vec4 fog_distances;
+	glm::vec4 ambient_colour;
+	glm::vec4 sunlight_dir;
+	glm::vec4 sunlight_colour;
+};
+
 struct FrameData {
 	VkSemaphore present_sem;
 	VkSemaphore render_sem;
@@ -68,7 +80,7 @@ class VulkanEngine {
 public:
 
 	bool m_isInitialized{ false };
-	int m_frameNumber {0};
+	uint64_t m_frameNumber {0};
 
 	VkExtent2D m_windowExtent{ 800, 600 };
 
@@ -83,6 +95,7 @@ public:
 	VkFormat m_swapchain_img_format;
 	std::vector<VkImage> m_swapchain_images;
 	std::vector<VkImageView> m_swapchain_img_views;
+	VkPhysicalDeviceProperties m_gpu_properties;
 
 	VkQueue m_gfxqueue = nullptr;
 	uint32_t m_gfxqueue_family = 0;
@@ -106,6 +119,9 @@ public:
 	std::vector<RenderObject> m_drawable;
 	std::unordered_map<std::string, Material> m_materials;
 	std::unordered_map<std::string, Mesh> m_meshes;
+
+	GPUSceneData m_scene_params;
+	Buffer m_scene_params_buf;
 
 	//initializes everything in the engine
 	void init();
@@ -145,6 +161,8 @@ private:
 
 	Buffer makeBuffer(size_t size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
 	void initDescriptors();
+
+	size_t padUniformBufferSize(size_t size);
 };
 
 class PipelineBuilder {
