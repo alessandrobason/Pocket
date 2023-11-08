@@ -2,18 +2,21 @@
 
 layout (location = 0) in vec3 in_colour;
 layout (location = 1) in vec3 in_normal;
-layout (location = 2) in vec3 frag_pos;
-layout (location = 3) in float time;
+layout (location = 2) in vec2 in_uv;
+layout (location = 3) in vec3 frag_pos;
+// layout (location = 3) in float time;
 
 layout (location = 0) out vec4 out_colour;
 
-layout(set=0, binding=1) uniform SceneData {
+layout (set=0, binding=1) uniform SceneData {
 	vec4 fog_colour; // w is for exponent
 	vec4 fog_distances; //x for min, y for max, zw unused.
 	vec4 ambient_colour;
 	vec4 sunlight_dir; //w for sun power
 	vec4 sunlight_colour;
 } scene_data;
+
+layout (set=2, binding=0) uniform sampler2D tex_sampler;
 
 void main() {
 #if 0
@@ -23,6 +26,6 @@ void main() {
 
     out_colour = vec4(diffuse * in_colour, 1);
 #endif
-
-    out_colour = vec4(in_colour + scene_data.ambient_colour.rgb, 1);
+    const vec4 tex_col = texture(tex_sampler, in_uv);
+    out_colour = tex_col;
 }

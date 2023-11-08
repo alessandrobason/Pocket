@@ -8,6 +8,7 @@ project ("vulkan_guide")
 set(CMAKE_CXX_STANDARD 20)
 
 find_package(Vulkan REQUIRED)
+# find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
 
 add_subdirectory(third_party)
 

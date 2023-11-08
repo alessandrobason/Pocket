@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 #include <deque>
 #include <functional>
@@ -42,12 +43,13 @@ struct MeshPushConstants {
 struct Material {
 	VkPipeline pipeline;
 	VkPipelineLayout layout;
+	VkDescriptorSet texture_set = VK_NULL_HANDLE;
 };
 
 struct RenderObject {
 	Mesh *mesh;
 	Material *material;
-	glm::mat4 matrix;
+	glm::mat4 matrix = glm::mat4(1);
 };
 
 struct GPUCameraData {
@@ -72,6 +74,23 @@ struct FrameData {
 	VkCommandBuffer cmd_buf;
 	Buffer camera_buf;
 	VkDescriptorSet global_descriptor;
+	Buffer object_buf;
+	VkDescriptorSet object_descriptor;
+};
+
+struct GPUObjectData {
+	glm::mat4 model;
+};
+
+struct UploadContext {
+	VkFence fence;
+	VkCommandPool pool;
+	VkCommandBuffer buffer;
+};
+
+struct Texture {
+	Image image;
+	VkImageView view;
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -114,6 +133,8 @@ public:
 	VkFormat m_depth_format;
 
 	VkDescriptorSetLayout m_global_set_layout;
+	VkDescriptorSetLayout m_object_set_layout;
+	VkDescriptorSetLayout m_single_texture_set_layout;
 	VkDescriptorPool m_descriptor_pool;
 
 	std::vector<RenderObject> m_drawable;
@@ -122,6 +143,10 @@ public:
 
 	GPUSceneData m_scene_params;
 	Buffer m_scene_params_buf;
+
+	UploadContext m_upload_ctx;
+
+	std::unordered_map<std::string, Texture> m_textures;
 
 	//initializes everything in the engine
 	void init();
@@ -135,7 +160,6 @@ public:
 	//run main loop
 	void run();
 
-private:
 	void initVulkan();
 	void initSwapChain();
 	void initCommands();
@@ -163,6 +187,17 @@ private:
 	void initDescriptors();
 
 	size_t padUniformBufferSize(size_t size);
+
+	void writeGpuMemory(Buffer &buffer, void *data, size_t len);
+
+	template<typename T>
+	void writeGpuMemory(Buffer &buffer, T *data, size_t count = 1) {
+		writeGpuMemory(buffer, (void *)data, sizeof(T) * count);
+	}
+
+	void immediateSubmit(std::function<void(VkCommandBuffer cmd)> &&fun);
+
+	void loadImages();
 };
 
 class PipelineBuilder {
