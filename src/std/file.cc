@@ -1,300 +1,278 @@
 #include "file.h"
 
-#include "std/arena.h"
+#include "logging.h"
 
-#if PLATFORM_WIN
+File::File(const char *filename, Mode mode) {
+    open(filename, mode);
+}
 
-#include "os/win32.h"
+File::~File() {
+    close();
+}
 
-static ulong file__toWin32Access(filemode_e mode) {
-    ulong access = 0;
-    if(mode & FILE_READ)  access |= GENERIC_READ;
-    if(mode & FILE_WRITE) access |= GENERIC_WRITE;
+arr<byte> File::readWhole(const char *fname) {
+    File fp = File(fname, File::Read);
+    if (!fp.isValid()) {
+        err("could not open file %s", fname);
+        return {};
+    }
+
+    arr<byte> out;
+    out.resize(fp.getSize());
+
+    bool success = fp.read(out.buf, out.len);
+    if (!success) {
+        err("could not read data from file %s", fname);
+        return {};
+    }
+
+    return out;
+}
+
+Str File::readWholeText(const char *fname) {
+    File fp = File(fname, File::Read);
+    if (!fp.isValid()) {
+        err("could not open file %s", fname);
+        return {};
+    }
+
+    Str out;
+    out.resize(fp.getSize());
+
+    bool success = fp.read(out.data(), out.size());
+    if (!success) {
+        err("could not read data from file %s", fname);
+        return {};
+    }
+
+    return out;
+}
+
+Str File::readWholeText(Arena &arena, const char *fname) {
+    File fp = File(fname, File::Read);
+    if (!fp.isValid()) {
+        err("could not open file %s", fname);
+        return {};
+    }
+
+    Str out;
+    out.resize(arena, fp.getSize());
+
+    bool success = fp.read(out.data(), out.size());
+    if (!success) {
+        err("could not read data from file %s", fname);
+        return {};
+    }
+
+    return out;
+}
+
+bool File::writeWhole(const char *fname, Slice<byte> data) {
+    File fp = File(fname, File::Write);
+    if (!fp.isValid()) {
+        err("could not open file %s", fname);
+        return false;
+    }
+
+    return fp.write(data.buf, data.len);
+}
+
+bool File::writeWhole(const char *fname, StrView string) {
+    return writeWhole(fname, Slice<char>(string.buf, string.len));
+}
+
+bool File::putc(char c) {
+    return write(&c);
+}
+
+bool File::puts(StrView view) {
+    return write(view.buf, view.len);
+}
+
+#if PK_WINDOWS
+
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
+static uint file__to_win32_access(File::Mode mode) {
+    uint access = 0;
+    if (mode & File::Read)  access |= GENERIC_READ;
+    if (mode & File::Write) access |= GENERIC_WRITE;
     return access;
 }
 
-static ulong file__toWin32Creation(filemode_e mode) {
-    if(mode & FILE_READ)                  return OPEN_EXISTING;
-    if(mode == (FILE_WRITE | FILE_CLEAR)) return CREATE_ALWAYS;
-    if(mode & FILE_WRITE)                 return OPEN_ALWAYS;
-    if(mode & FILE_BOTH)                  return OPEN_ALWAYS;
-    err("unrecognized creation mode: %d", mode);
+static uint file__to_win32_creation(File::Mode mode) {
+    if (mode & File::Read)                   return OPEN_EXISTING;
+    if (mode == (File::Write | File::Clear)) return CREATE_ALWAYS;
+    if (mode & File::Write)                  return OPEN_ALWAYS;
+    if (mode & File::Both)                   return OPEN_ALWAYS;
+    err("unrecognized creation mode: %u", mode);
     return 0;
 }
 
-bool fileExists(const char *fname) {
+u64 File::getTime(const char *path) {
+    u64 time = File(path, File::Read).getTime();
+    return time;
+}
+
+bool File::exists(const char *fname) {
     if (!fname) return false;
     return GetFileAttributesA(fname) != INVALID_FILE_ATTRIBUTES;
 }
 
-file_t fileOpen(const char *fname, filemode_e mode) {
-    if (!fname) return (file_t){0};
+bool File::open(const char *fname, Mode mode) {
+    if (!fname) {
+        err("null filename passed to File::open");
+        return false;
+    }
 
-    return (file_t)CreateFileA(
-        fname, 
-        file__toWin32Access(mode), 
-        0, 
-        NULL, 
-        file__toWin32Creation(mode), 
-        FILE_ATTRIBUTE_NORMAL, 
-        NULL
+    file_ptr = (uptr)CreateFileA(
+        fname,
+        file__to_win32_access(mode),
+        0,
+        nullptr,
+        file__to_win32_creation(mode),
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
     );
 }
 
-void fileClose(file_t self) {
-    if (self) {
-        CloseHandle((HANDLE)self);
+void File::close() {
+    if (file_ptr) {
+        CloseHandle((HANDLE)file_ptr);
     }
 }
 
-bool fileIsValid(file_t self) {
-    return self && (HANDLE)self != INVALID_HANDLE_VALUE;
+bool File::isValid() const {
+    return file_ptr && (HANDLE)file_ptr != INVALID_HANDLE_VALUE;
 }
 
-usize fileRead(file_t self, void *buf, usize len) {
-    if (!fileIsValid(self)) {
-        return 0;
-    }
+bool File::read(void *buf, usize len) {
+    if (!isValid()) return false;
+    
     ulong bytes_read = 0;
-    bool32 result = ReadFile((HANDLE)self, buf, (ulong)len, &bytes_read, NULL);
-    return result == TRUE ? (usize)bytes_read : 0;
+    i32 result = ReadFile((HANDLE)file_ptr, buf, (uint)len, &bytes_read, nullptr);
+    return result == TRUE;
 }
 
-usize fileWrite(file_t self, const void *buf, usize len) {
-    if (!fileIsValid(self)) {
-        return 0;
-    }
+bool File::write(const void *buf, usize len) {
+    if (!isValid()) return false;
     ulong bytes_read = 0;
-    bool32 result = WriteFile((HANDLE)self, buf, (ulong)len, &bytes_read, NULL);
-    return result == TRUE ? (usize)bytes_read : 0;
+    i32 result = WriteFile((HANDLE)file_ptr, buf, (ulong)len, &bytes_read, nullptr);
+    return result == TRUE;
 }
 
-bool fileSeekEnd(file_t self) {
-    if (!fileIsValid(self)) {
-        return false;
-    }
-    return SetFilePointerEx((HANDLE)self, (LARGE_INTEGER){0}, NULL, FILE_END) == TRUE;
+bool File::seekEnd() {
+    if (!isValid()) return false;
+    return SetFilePointerEx((HANDLE)file_ptr, {}, nullptr, FILE_END) == TRUE;
 }
 
-bool fileRewind(file_t self) {
-    if (!fileIsValid(self)) {
-        return false;
-    }
-    return SetFilePointerEx((HANDLE)self, (LARGE_INTEGER){0}, NULL, FILE_BEGIN) == TRUE;
+bool File::rewind() {
+    if (!isValid()) return false;
+    return SetFilePointerEx((HANDLE)file_ptr, {}, nullptr, FILE_BEGIN) == TRUE;
 }
 
-uint64 fileTell(file_t self) {
-    if (!fileIsValid(self)) {
-        return 0;
-    }
+u64 File::tell() {
+    if (!isValid()) return 0;
     LARGE_INTEGER tell;
-    bool32 result = SetFilePointerEx((HANDLE)self, (LARGE_INTEGER){0}, &tell, FILE_CURRENT);
-    return result == TRUE ? (uint64)tell.QuadPart : 0;
+    i32 result = SetFilePointerEx((HANDLE)file_ptr, {}, &tell, FILE_CURRENT);
+    return result == TRUE ? (u64)tell.QuadPart : 0;
 }
 
-usize fileGetSize(file_t self) {
-    if (!fileIsValid(self)) {
-        return 0;
-    }
-    ulong high_order = 0;
-    ulong low_order = GetFileSize((HANDLE)self, &high_order);
-    if (low_order == INVALID_FILE_SIZE) {
-        err("Invalid file size: %d", GetLastError());
-        return 0;
-    }
-    uint64 size = (high_order << sizeof(ulong)) | low_order;
-    return size;
+usize File::getSize() {
+    if (!isValid()) return 0;
+    LARGE_INTEGER file_size;
+    i32 result = GetFileSizeEx((HANDLE)file_ptr, &file_size);
+    return result == TRUE ? (u64)file_size.QuadPart : 0;
 }
 
-uint64 fileGetTime(file_t self) {
-    if (!fileIsValid(self)) {
-        return 0;
-    }
-    uint64 fp_time = 0;
-    GetFileTime((HANDLE)self, NULL, NULL, (FILETIME *)&fp_time);
+u64 File::getTime() {
+    if (!isValid()) return 0;
+    u64 fp_time = 0;
+    GetFileTime((HANDLE)file_ptr, nullptr, nullptr, (FILETIME *)&fp_time);
     return fp_time;
-}
-
-uint64 fileGetTimePath(const char *path) {
-    file_t fp = fileOpen(path, FILE_READ);
-    uint64 time = fileGetTime(fp);
-    fileClose(fp);
-    return time;
 }
 
 #endif
 
-#if PLATFORM_LINUX
+
+#if PK_POSIX
 
 // TODO use linux specific stuff?
 #include <stdio.h>
 
-bool fileExists(const char *fname) {
-    FILE *fp = fopen(fname, "rb");
-    if (fp) fclose(fp);
-    return fp != NULL;
-}
-
-file_t fileOpen(const char *fname, filemode_e mode) {
-    const char *m = "rb";
-    switch (mode) {
-        case FILE_READ:  m = "rb"; break;
-        case FILE_WRITE: m = "wb"; break;
-        case FILE_CLEAR: m = "wb"; break;
-        case FILE_BOTH:  m = "rb+"; break;
-    }
-
-    return (file_t)fopen(fname, m);
-}
-
-void fileClose(file_t self) {
-    if (self) fclose((FILE *)self);
-}
-
-bool fileIsValid(file_t self) {
-    return (FILE *)self;
-}
-
-usize fileRead(file_t self, void *buf, usize len) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return 0;
-    return fread(buf, 1, len, fp);
-}
-
-usize fileWrite(file_t self, const void *buf, usize len) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return 0;
-    return fwrite(buf, 1, len, fp);
-}
-
-bool fileSeekEnd(file_t self) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return false;
-    return fseek(fp, 0, SEEK_END) == 0;
-}
-
-bool fileRewind(file_t self) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return false;
-    return fseek(fp, 0, SEEK_SET) == 0;
-}
-
-uint64 fileTell(file_t self) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return 0;
-    return (uint64)ftell(fp);
-}
-
-usize fileGetSize(file_t self) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return 0;
-    fileSeekEnd(self);
-    usize len = fileTell(self);
-    fileRewind(self);
-    return len;
-}
-
-uint64 fileGetTime(file_t self) {
-    FILE *fp = (FILE *)self;
-    if (!fp) return 0;
-    // TODO linux
-    assert(false);
-}
-
-uint64 fileGetTimePath(const char *path) {
+u64 File::getTime(const char *path) {
     if (!path) return 0;
     // TODO linux
     assert(false);
 }
 
+bool File::exists(const char *fname) {
+    FILE *fp = fopen(fname, "rb");
+    if (fp) fclose(fp);
+    return fp != nullptr;
+}
+
+bool File::open(const char *fname, Mode mode) {
+    const char *m = "rb";
+    switch (mode) {
+        case File::Read:  m = "rb"; break;
+        case File::Write: m = "wb"; break;
+        case File::Clear: m = "wb"; break;
+        case File::Both:  m = "rb+"; break;
+    }
+
+    file_ptr = (uptr)fopen(fname, m);
+    return (FILE *)file_ptr != nullptr;
+}
+
+void File::close() {
+    if (file_ptr) {
+        fclose((FILE *)file_ptr);
+    }
+}
+
+bool File::isValid() const {
+    return (FILE *)file_ptr != nullptr;
+}
+
+bool File::read(void *buf, usize len) {
+    if (!isValid()) return false;
+    return fread(buf, 1, len, (FILE *)file_ptr) == len;
+}
+
+bool File::write(const void *buf, usize len) {
+    if (!isValid()) return false;
+    return fwrite(buf, 1, len, (FILE *)file_ptr) == len;
+}
+
+bool File::seekEnd() {
+    if (!isValid()) return false;
+    return fseek((FILE *)file_ptr, 0, SEEK_END) == 0;
+}
+
+bool File::rewind() {
+    if (!isValid()) return false;
+    return fseek((FILE *)file_ptr, 0, SEEK_SET) == 0;
+}
+
+u64 File::tell() {
+    if (!isValid()) return 0;
+    return (u64)ftell((FILE *)file_ptr);
+}
+
+usize File::getSize() {
+    if (!isValid()) return 0;
+    seekEnd();
+    usize len = tell();
+    rewind();
+    return len;
+}
+
+u64 File::getTime() {
+    if (!isValid()) return 0;
+    // TODO linux
+    assert(false);
+}
+
 #endif
-
-bool filePutc(file_t self, char c) {
-    return fileWrite(self, &c, 1) == 1;
-}
-
-bool filePuts(file_t self, const char *str) {
-    if (!str) return false;
-    usize len = strlen(str);
-    return fileWrite(self, str, len) == len;
-}
-
-bool filePutStr(file_t self, const str_t *data) {
-    return fileWrite(self, data->buf, data->len) == data->len;
-}
-
-bool filePutView(file_t self, strview_t view) {
-    return fileWrite(self, view.buf, view.len) == view.len;
-}
-
-filebuf_t fileReadWhole(arena_t *arena, const char *fname) {
-    file_t fp = fileOpen(fname, FILE_READ);
-    filebuf_t buf = fileReadWholeFP(arena, fp);
-    fileClose(fp);
-    return buf;
-}
-
-filebuf_t fileReadWholeFP(arena_t *arena, file_t self) {
-    if (!fileIsValid(self)) {
-        return (filebuf_t){0};
-    }
-    filebuf_t out = {0};
-    out.len = fileGetSize(self);
-    out.buf = new(arena, byte, out.len);
-    bool success = fileRead(self, out.buf, out.len) == out.len;
-    if (!success) {
-        arenaRewind(arena, arenaTell(arena) - out.len);
-        return (filebuf_t){0};
-    }
-    return out;
-}
-
-str_t fileReadWholeText(arena_t *arena, const char *fname) {
-    file_t fp = fileOpen(fname, FILE_READ);
-    str_t buf = fileReadWholeTextFP(arena, fp);
-    fileClose(fp);
-    return buf;
-}
-
-str_t fileReadWholeTextFP(arena_t *arena, file_t self) {
-    if (!fileIsValid(self)) {
-        return (str_t){0};
-    }
-    str_t out = {0};
-    out.len = fileGetSize(self);
-    out.buf = new(arena, char, out.len + 1);
-    bool success = fileRead(self, out.buf, out.len) == out.len;
-    if (!success) {
-        arenaRewind(arena, arenaTell(arena) - (out.len + 1));
-        return (str_t){0};
-    }
-    return out; 
-}
-
-bool fileWriteWhole(const char *fname, const byte *data, usize len) {
-    file_t fp = fileOpen(fname, FILE_WRITE);
-    bool success = fileWriteWholeFP(fp, data, len);
-    fileClose(fp);
-    return success;
-}
-
-bool fileWriteWholeFP(file_t self, const byte *data, usize len) {
-    if (!fileIsValid(self)) {
-        return false;
-    }
-    return fileWrite(self, data, len) == len;
-}
-
-bool fileWriteWholeText(const char *fname, strview_t string) {
-    file_t fp = fileOpen(fname, FILE_WRITE);
-    bool success = fileWriteWholeTextFP(fp, string);
-    fileClose(fp);
-    return success;
-}
-
-bool fileWriteWholeTextFP(file_t self, strview_t string) {
-    if (!fileIsValid(self)) {
-        return false;
-    }
-    return fileWrite(self, string.buf, string.len) == string.len;
-}

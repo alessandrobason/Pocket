@@ -537,7 +537,7 @@ void VulkanEngine::initPipeline() {
 }
 
 void VulkanEngine::initScene() {
-#if 1
+#if 0
 	RenderObject monkey = {
 		.mesh = getMesh("monkey"),
 		.material = getMaterial("default"),
@@ -590,7 +590,7 @@ void VulkanEngine::initScene() {
 
 	VkDescriptorImageInfo image_info = {
 		.sampler = blocky_sampler,
-		.imageView = m_textures["empire_diffuse"].view,
+		.imageView = m_textures.get("empire_diffuse")->view,
 		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 	};
 
@@ -644,12 +644,12 @@ void VulkanEngine::loadMeshes() {
 	Mesh monkey;
 	monkey.loadFromObj("../../assets/monkey_smooth.obj");
 	uploadMesh(monkey);
-	m_meshes["monkey"] = monkey;
+	m_meshes.push("monkey", monkey);
 
 	Mesh lost_empire;
 	lost_empire.loadFromObj("../../assets/lost_empire.obj");
 	uploadMesh(lost_empire);
-	m_meshes["lost_empire"] = lost_empire;
+	m_meshes.push("lost_empire", lost_empire);
 }
 
 void VulkanEngine::uploadMesh(Mesh &mesh) {
@@ -704,34 +704,36 @@ void VulkanEngine::uploadMesh(Mesh &mesh) {
 	vmaDestroyBuffer(m_allocator, staging_buffer.buffer, staging_buffer.allocation);
 }
 
-
 Material *VulkanEngine::makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, StrView name) {
 	Material mat = {
 		.pipeline = pipeline,
 		.layout = layout,
 	};
-	m_materials[name] = mat;
-	return &m_materials[name];
+	return m_materials.push(name, mat);
+	//m_materials[name] = mat;
+	//return &m_materials[name];
 }
 
 Material *VulkanEngine::getMaterial(StrView name) {
-	auto it = m_materials.find(name);
-	if (it == m_materials.end()) {
-		return nullptr;
-	}
-	return &it->second;
+	return m_materials.get(name);
+	// auto it = m_materials.find(name);
+	// if (it == m_materials.end()) {
+	// 	return nullptr;
+	// }
+	// return &it->second;
 }
 
 Mesh *VulkanEngine::getMesh(StrView name) {
-	auto it = m_meshes.find(name);
-	if (it == m_meshes.end()) {
-		return nullptr;
-	}
-	return &it->second;
+	return m_meshes.get(name);
+	// auto it = m_meshes.find(name);
+	// if (it == m_meshes.end()) {
+	// 	return nullptr;
+	// }
+	// return &it->second;
 }
 
 void VulkanEngine::drawObjects(VkCommandBuffer cmd, RenderObject *first, int count) {
-	glm::vec3 cam_pos = { 0, -6, -10 };
+	glm::vec3 cam_pos = { 0, -20, -10 };
 	glm::mat4 view = glm::translate(glm::mat4(1), cam_pos);
 	glm::mat4 proj = glm::perspective(
 		glm::radians(70.f),
@@ -1100,7 +1102,7 @@ void VulkanEngine::loadImages() {
 	vkCreateImageView(m_device, &image_info, nullptr, &lost_empire.view);
 	m_main_delete_queue.push(vkDestroyImageView, m_device, lost_empire.view, nullptr);
 
-	m_textures["empire_diffuse"] = lost_empire;
+	m_textures.push("empire_diffuse", lost_empire);
 }
 
 ////////////////////////////////////////////////////////////

@@ -2,55 +2,66 @@
 
 #include "common.h"
 #include "str.h"
+#include "arr.h"
+#include "slice.h"
 
-typedef struct arena_t arena_t;
+struct Arena;
 
-typedef enum {
-    FILE_READ  = 1 << 0,
-    FILE_WRITE = 1 << 1,
-    FILE_CLEAR = 1 << 2,
-    FILE_BOTH  = FILE_READ | FILE_WRITE
-} filemode_e;
+struct File {
+    enum Mode : u8 {
+        Read = 1 << 0,
+        Write = 1 << 1,
+        Clear = 1 << 2,
+        Both = Read | Write
+    };
 
-typedef uptr file_t;
+    File() = default;
+    File(const char *filename, Mode mode = Read);
+    ~File();
 
-typedef struct filebuf_t {
-    byte *buf;
-    usize len;
-} filebuf_t;
+    static u64 getTime(const char *path);
+    static bool exists(const char *fname);
+    static arr<byte> readWhole(const char *fname);
+    static Str readWholeText(const char *fname);
 
-bool fileExists(const char *fname);
+    //static arr<byte> readWhole(Arena &arena, const char *fname);
+    static Str readWholeText(Arena &arena, const char *fname);
 
-file_t fileOpen(const char *fname, filemode_e mode);
-void fileClose(file_t self);
+    static bool writeWhole(const char *fname, Slice<byte> data);
+    static bool writeWhole(const char *fname, StrView string);
+    template<typename T>
+    static bool writeWhole(const char *fname, Slice<T> data) {
+        return writeWhole(fname, Slice<byte>((byte *)data.buf, data.byteSize()));
+    }
 
-bool fileIsValid(file_t self);
+    bool open(const char *fname, Mode mode = Read);
+    void close();
 
-bool filePutc(file_t self, char c);
-bool filePuts(file_t self, const char *str);
-bool filePutStr(file_t self, const str_t *str);
-bool filePutView(file_t self, strview_t view);
+    bool isValid() const;
 
-usize fileRead(file_t self, void *buf, usize len);
-usize fileWrite(file_t self, const void *buf, usize len);
+    bool putc(char c);
+    bool puts(StrView view);
 
-bool fileSeekEnd(file_t self);
-bool fileRewind(file_t self);
+    bool read(void *buf, usize len);
+    bool write(const void *buf, usize len);
 
-uint64 fileTell(file_t self);
-usize fileGetSize(file_t self);
+    template<typename T>
+    bool read(T *buf, usize count = 1) {
+        return read((void *)buf, sizeof(T) * count);
+    }
 
-filebuf_t fileReadWhole(arena_t *arena, const char *fname);
-filebuf_t fileReadWholeFP(arena_t *arena, file_t self);
+    template<typename T>
+    bool write(const T *buf, usize count = 1) {
+        return write((const void *)buf, sizeof(T) * count);
+    }
 
-str_t fileReadWholeText(arena_t *arena, const char *fname);
-str_t fileReadWholeTextFP(arena_t *arena, file_t self);
+    bool seekEnd();
+    bool rewind();
 
-bool fileWriteWhole(const char *fname, const byte *data, usize len);
-bool fileWriteWholeFP(file_t self, const byte *data, usize len);
+    u64 tell();
+    usize getSize();
 
-bool fileWriteWholeText(const char *fname, strview_t string);
-bool fileWriteWholeTextFP(file_t self, strview_t string);
+    u64 getTime();
 
-uint64 fileGetTime(file_t self);
-uint64 fileGetTimePath(const char *path);
+    uptr file_ptr = 0;
+};

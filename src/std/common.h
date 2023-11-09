@@ -18,6 +18,7 @@ using byte  = u8;
 using uchar  = unsigned char;
 using ushort = unsigned short;
 using uint   = unsigned int;
+using ulong  = unsigned long;
 
 #ifdef UNICODE
 using TCHAR = wchar_t;

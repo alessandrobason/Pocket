@@ -28,7 +28,7 @@ struct InStream {
     // ignore characters until the view and skip it
     void ignoreAndSkip(StrView view);
     // skip n characters
-    void skip(usize n);
+    void skip(usize n = 1);
     // skips whitespace (' ', '\n', '\t', '\r')
     void skipWhitespace();
     // if the next character is c, advances and returns true, otherwise returns false

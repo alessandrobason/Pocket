@@ -146,6 +146,8 @@ template<typename T>
 constexpr bool in__uget(InStream &s, T &v) {
     constexpr u64 max_v = (~0ull) >> (64 - sizeof(T) * 8);
 
+    if (s.isFinished()) return false;
+
     char *end = nullptr;
     // TODO unix doesn't have this i think
     u64 res = strtoull(s.cur, &end, 0);

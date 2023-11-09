@@ -89,7 +89,7 @@ static void vmem__update_page_size(void) {
 
 #endif
 
-#if PK_LINUX
+#if PK_POSIX
 
 #include <sys/mman.h>
 #include <unistd.h>

@@ -125,6 +125,28 @@ void Str::destroy() {
     len = 0;
 }
 
+void Str::resize(usize new_len) {
+    usize sz = size();
+    if (new_len == sz) return;
+    char *newbuf = (char *)pk_realloc(buf, new_len + 1);
+    pk_assert(newbuf);
+    buf = newbuf;
+    bool owned = isOwned();
+    len = new_len;
+    if (owned) len |= str_not_owned_flags;
+}
+
+void Str::resize(Arena &arena, usize new_len) {
+    usize sz = size();
+    if (new_len == sz) return;
+    char *newbuf = arena.alloc<char>(new_len + 1);
+    pk_assert(newbuf);
+    memcpy(newbuf, buf, sz);
+    bool owned = isOwned();
+    len = new_len;
+    if (owned) len |= str_not_owned_flags;
+}
+
 void Str::replace(char from, char to) {
     for (char &c : *this) {
         if (c == from) {
@@ -263,7 +285,7 @@ Str &Str::operator=(const Str &str) {
 
 bool Str::operator==(StrView v) const {
     if (v.size() != size()) return false;
-    return memcmp(buf, v.buf, size());
+    return memcmp(buf, v.buf, size()) == 0;
 }
 
 bool Str::operator!=(StrView v) const {
@@ -516,7 +538,7 @@ const char &StrView::operator[](usize index) const {
 
 bool StrView::operator==(StrView v) const {
     if (v.len != len) return false;
-    return memcmp(buf, v.buf, len);
+    return memcmp(buf, v.buf, len) == 0;
 }
 
 bool StrView::operator!=(StrView v) const {

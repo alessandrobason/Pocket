@@ -3,15 +3,14 @@
 
 #pragma once
 
-#include <deque>
 #include <functional>
-#include <unordered_map>
 
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 
 #include "std/arr.h"
 #include "std/str.h"
+#include "std/hashmap.h"
 
 #include "vk_types.h"
 #include "mesh.h"
@@ -21,11 +20,11 @@ constexpr uint64_t alignTo(uint64_t value, uint64_t alignment) {
 }
 
 struct DeletionQueue {
-	std::deque<std::function<void()>> deleters;
+	arr<std::function<void()>> deleters;
 
 	template<typename Fn, typename ...Targs>
 	void push(Fn &&fn, Targs &&...args) {
-		deleters.emplace_back(std::bind(fn, args...));
+		deleters.push(std::bind(fn, args...));
 	}
 
 	void flush(VkDevice device) {
@@ -139,15 +138,18 @@ public:
 	VkDescriptorPool m_descriptor_pool;
 
 	arr<RenderObject> m_drawable;
-	std::unordered_map<StrView, Material, StrHash> m_materials;
-	std::unordered_map<StrView, Mesh, StrHash> m_meshes;
+	HashMap<StrView, Material> m_materials;
+	HashMap<StrView, Mesh> m_meshes;
+	// std::unordered_map<StrView, Material, StrHash> m_materials;
+	// std::unordered_map<StrView, Mesh, StrHash> m_meshes;
 
 	GPUSceneData m_scene_params;
 	Buffer m_scene_params_buf;
 
 	UploadContext m_upload_ctx;
 
-	std::unordered_map<StrView, Texture, StrHash> m_textures;
+	HashMap<StrView, Texture> m_textures;
+	// std::unordered_map<StrView, Texture, StrHash> m_textures;
 
 	//initializes everything in the engine
 	void init();

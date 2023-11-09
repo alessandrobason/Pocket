@@ -1,25 +1,17 @@
+file(GLOB PK_STD "std/*.h" "std/*.cc")
+file(GLOB PK_FMT "formats/*.h" "formats/*.cc")
+file(GLOB PK_SRC "*.h" "*.cpp" "*.cc")
 
 # Add source to this project's executable.
 add_executable(vulkan_guide
-    std/arena.cc
-    std/logging.cc
-    std/str.cc
-    std/stream.cc
-    std/vmem.cc
-
-    main.cpp
-    mesh.h
-    mesh.cpp
-    vm_mem_alloc.cpp
-    vk_engine.cpp
-    vk_engine.h
-    vk_types.h
-    vk_initializers.cpp
-    vk_initializers.h
-    vk_textures.h
-    vk_textures.cpp
+    ${PK_STD}
+    ${PK_FMT}
+	${PK_SRC}
 )
 
+source_group("std" FILES ${PK_STD})
+source_group("formats" FILES ${PK_FMT})
+source_group("src" FILES ${PK_SRC})
 
 set_property(TARGET vulkan_guide PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:vulkan_guide>")
 

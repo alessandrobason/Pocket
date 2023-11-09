@@ -85,7 +85,7 @@ static void trace__set_level_colour(trace::Level level) {
 
 #endif
 
-#if PK_LINUX
+#if PK_POSIX
 
 static void trace__set_level_colour(trace::Level level) {
     static const char *level_colours[(int)trace::Level::Fatal + 1] = {

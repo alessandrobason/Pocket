@@ -30,6 +30,8 @@ struct Str {
     void moveFrom(char *str, usize str_len);
     Str dup(Arena &arena) const;
     void destroy();
+    void resize(usize new_len);
+    void resize(Arena &arena, usize new_len);
 
     void replace(char from, char to);
     bool empty() const;
@@ -123,24 +125,4 @@ struct StrView {
 
     const char *buf = nullptr;
     usize len = 0;
-};
-
-// copied straight from msvc source code 
-constexpr usize str__fnv_offset_basis = 14695981039346656037ULL;
-constexpr usize str__fnv_prime        = 1099511628211ULL;
-
-inline usize str__fnv1a_append_bytes(usize val, const byte *first, const size_t count) { 
-    // accumulate range [first, first + count) into partial FNV-1a hash val
-    for (size_t i = 0; i < count; ++i) {
-        val ^= static_cast<size_t>(first[i]);
-        val *= str__fnv_prime;
-    }
-
-    return val;
-}
-
-struct StrHash {
-    usize operator()(const StrView &s) const {
-        return (str__fnv1a_append_bytes(str__fnv_offset_basis, (const u8 *)s.c_str(), s.size()));
-    }
 };
