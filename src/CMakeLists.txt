@@ -1,9 +1,13 @@
 
 # Add source to this project's executable.
 add_executable(vulkan_guide
+    std/arena.cc
+    std/logging.cc
+    std/str.cc
+    std/stream.cc
+    std/vmem.cc
+
     main.cpp
-    utils.cpp
-    utils.h
     mesh.h
     mesh.cpp
     vm_mem_alloc.cpp

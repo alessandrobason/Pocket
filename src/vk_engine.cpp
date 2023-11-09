@@ -9,8 +9,8 @@
 #include <vk_initializers.h>
 
 #include "VkBootstrap.h"
-#include "utils.h"
 #include "vk_textures.h"
+#include "std/logging.h"
 
 #define VK_CHECK(x) \
 	do { \
@@ -28,7 +28,7 @@ static u32 vulkan_print_callback(
 );
 
 void VulkanEngine::init() {
-	debug("Initializing");
+	info("Initializing");
 
 	// We initialize SDL and create a window with it. 
 	SDL_Init(SDL_INIT_VIDEO);
@@ -68,7 +68,7 @@ void VulkanEngine::init() {
 }
 void VulkanEngine::cleanup()
 {	
-	debug("Cleaning up");
+	info("Cleaning up");
 
 	
 	if (m_isInitialized) {
@@ -122,7 +122,7 @@ void VulkanEngine::draw() {
 		.renderArea = {
 			.extent = m_windowExtent,
 		},
-		.clearValueCount = arrlen(clear_values),
+		.clearValueCount = pk_arrlen(clear_values),
 		.pClearValues = clear_values
 	};
 
@@ -246,8 +246,15 @@ void VulkanEngine::initSwapChain() {
 		.value();
 
 	m_swapchain = vkb_sc.swapchain;
-	m_swapchain_images = vkb_sc.get_images().value();
-	m_swapchain_img_views = vkb_sc.get_image_views().value();
+	
+	auto images = vkb_sc.get_images().value();
+	m_swapchain_images.reserve(images.size());
+	for (auto i : images) m_swapchain_images.push(i);
+	
+	auto views = vkb_sc.get_image_views().value();
+	m_swapchain_img_views.reserve(images.size());
+	for (auto v : views) m_swapchain_img_views.push(v);
+
 	m_swapchain_img_format = vkb_sc.image_format;
 
 	m_main_delete_queue.push(vkDestroySwapchainKHR, m_device, m_swapchain, nullptr);
@@ -402,11 +409,11 @@ void VulkanEngine::initDefaultRenderPass() {
 
 	VkRenderPassCreateInfo render_pass_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = arrlen(attachments), 
+		.attachmentCount = pk_arrlen(attachments), 
 		.pAttachments = attachments,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
-		.dependencyCount = arrlen(dependencies),
+		.dependencyCount = pk_arrlen(dependencies),
 		.pDependencies = dependencies,
 	};
 
@@ -425,7 +432,7 @@ void VulkanEngine::initFramebuffers() {
 	};
 
 	const size_t sc_image_count = m_swapchain_images.size();
-	m_framebuffers = std::vector<VkFramebuffer>{ sc_image_count };
+	m_framebuffers.resize(sc_image_count);
 
 	for (size_t i = 0; i < sc_image_count; ++i) {
 		VkImageView attachments[] = {
@@ -434,7 +441,7 @@ void VulkanEngine::initFramebuffers() {
 		};
 
 		fb_info.pAttachments = attachments;
-		fb_info.attachmentCount = arrlen(attachments);
+		fb_info.attachmentCount = pk_arrlen(attachments);
 		
 		//fb_info.pAttachments = &m_swapchain_img_views[i];
 		VK_CHECK(vkCreateFramebuffer(m_device, &fb_info, nullptr, &m_framebuffers[i]));
@@ -493,7 +500,7 @@ void VulkanEngine::initPipeline() {
 
 	VkPipelineLayoutCreateInfo mesh_pip_layout_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = arrlen(set_layouts),
+		.setLayoutCount = pk_arrlen(set_layouts),
 		.pSetLayouts = set_layouts,
 		.pushConstantRangeCount = 1,
 		.pPushConstantRanges = &push_constat,
@@ -537,25 +544,25 @@ void VulkanEngine::initScene() {
 	};
 
 	monkey.matrix = glm::translate(glm::mat4(1), glm::vec3(0, 6, 0));
-	m_drawable.push_back(monkey);
+	m_drawable.push(monkey);
 
 	monkey.matrix = glm::translate(glm::mat4(1), glm::vec3(5, 6, 0));
-	m_drawable.push_back(monkey);
+	m_drawable.push(monkey);
 
 	monkey.matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 6, 0));
-	m_drawable.push_back(monkey);
+	m_drawable.push(monkey);
 
 	monkey.matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, 0));
-	m_drawable.push_back(monkey);
+	m_drawable.push(monkey);
 
 	monkey.matrix = glm::translate(glm::mat4(1), glm::vec3(0, 2, 0));
-	m_drawable.push_back(monkey);
+	m_drawable.push(monkey);
 #else
 	RenderObject map = {
 		.mesh = getMesh("lost_empire"),
 		.material = getMaterial("texturedmesh"),
 };
-	m_drawable.push_back(map);
+	m_drawable.push(map);
 
 	VkSamplerCreateInfo sampler_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -698,7 +705,7 @@ void VulkanEngine::uploadMesh(Mesh &mesh) {
 }
 
 
-Material *VulkanEngine::makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string &name) {
+Material *VulkanEngine::makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, StrView name) {
 	Material mat = {
 		.pipeline = pipeline,
 		.layout = layout,
@@ -707,7 +714,7 @@ Material *VulkanEngine::makeMaterial(VkPipeline pipeline, VkPipelineLayout layou
 	return &m_materials[name];
 }
 
-Material *VulkanEngine::getMaterial(const std::string &name) {
+Material *VulkanEngine::getMaterial(StrView name) {
 	auto it = m_materials.find(name);
 	if (it == m_materials.end()) {
 		return nullptr;
@@ -715,7 +722,7 @@ Material *VulkanEngine::getMaterial(const std::string &name) {
 	return &it->second;
 }
 
-Mesh *VulkanEngine::getMesh(const std::string &name) {
+Mesh *VulkanEngine::getMesh(StrView name) {
 	auto it = m_meshes.find(name);
 	if (it == m_meshes.end()) {
 		return nullptr;
@@ -895,7 +902,7 @@ void VulkanEngine::initDescriptors() {
 
 	VkDescriptorSetLayoutCreateInfo set_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = arrlen(bindings),
+		.bindingCount = pk_arrlen(bindings),
 		.pBindings = bindings,
 	};
 
@@ -939,7 +946,7 @@ void VulkanEngine::initDescriptors() {
 	VkDescriptorPoolCreateInfo pool_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 		.maxSets = 10,
-		.poolSizeCount = arrlen(sizes),
+		.poolSizeCount = pk_arrlen(sizes),
 		.pPoolSizes = sizes
 	};
 
@@ -950,7 +957,7 @@ void VulkanEngine::initDescriptors() {
 	m_scene_params_buf = makeBuffer(scene_buf_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	m_main_delete_queue.push(vmaDestroyBuffer, m_allocator, m_scene_params_buf.buffer, m_scene_params_buf.allocation);
 
-	for (size_t i = 0; i < arrlen(m_frames); ++i) {
+	for (size_t i = 0; i < pk_arrlen(m_frames); ++i) {
 		FrameData &frame = m_frames[i];
 
 		constexpr int max_objects = 10'000;
@@ -1028,7 +1035,7 @@ void VulkanEngine::initDescriptors() {
 			object_write,
 		};
 
-		vkUpdateDescriptorSets(m_device, arrlen(set_writes), set_writes, 0, nullptr);
+		vkUpdateDescriptorSets(m_device, pk_arrlen(set_writes), set_writes, 0, nullptr);
 	}
 }
 
@@ -1104,19 +1111,19 @@ static u32 vulkan_print_callback(
 	const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
 	void *pUserData
 ) {
-	LogLevel level = LogLevel::None;
+	trace::Level level = trace::Level::Info;
 	switch (messageSeverity) {
 		case VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-			level = LogLevel::Debug;
+			level = trace::Level::Info;
 			break;
 		case VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-			level = LogLevel::Info;
+			level = trace::Level::Info;
 			break;
 		case VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-			level = LogLevel::Warn;
+			level = trace::Level::Warn;
 			break;
 		case VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-			level = LogLevel::Error;
+			level = trace::Level::Error;
 			break;
 	}
 
@@ -1131,7 +1138,7 @@ static u32 vulkan_print_callback(
 		case 7: type = "General | Validation | Performance"; break;
 	}
 
-	logMessage(level, "(Vulkan / %s): %s", type, pCallbackData->pMessage);
+	trace::print(level, "(Vulkan / %s): %s", type, pCallbackData->pMessage);
 
 	return VK_FALSE;
 }
@@ -1141,7 +1148,7 @@ PipelineBuilder &PipelineBuilder::pushShader(
 	VkShaderModule shader, 
 	const char *entry
 ) {
-	m_shader_stages.push_back({
+	m_shader_stages.push(VkPipelineShaderStageCreateInfo{
 		.stage = stage,
 		.module = shader,
 		.pName = entry,

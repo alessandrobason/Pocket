@@ -3,14 +3,15 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
 #include <deque>
 #include <functional>
 #include <unordered_map>
 
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
+
+#include "std/arr.h"
+#include "std/str.h"
 
 #include "vk_types.h"
 #include "mesh.h"
@@ -112,8 +113,8 @@ public:
 	VkSurfaceKHR m_surface = nullptr;
 	VkSwapchainKHR m_swapchain = nullptr;
 	VkFormat m_swapchain_img_format;
-	std::vector<VkImage> m_swapchain_images;
-	std::vector<VkImageView> m_swapchain_img_views;
+	arr<VkImage> m_swapchain_images;
+	arr<VkImageView> m_swapchain_img_views;
 	VkPhysicalDeviceProperties m_gpu_properties;
 
 	VkQueue m_gfxqueue = nullptr;
@@ -122,7 +123,7 @@ public:
 	FrameData m_frames[frame_overlap];
 
 	VkRenderPass m_render_pass;
-	std::vector<VkFramebuffer> m_framebuffers;
+	arr<VkFramebuffer> m_framebuffers;
 
 	DeletionQueue m_main_delete_queue;
 
@@ -137,16 +138,16 @@ public:
 	VkDescriptorSetLayout m_single_texture_set_layout;
 	VkDescriptorPool m_descriptor_pool;
 
-	std::vector<RenderObject> m_drawable;
-	std::unordered_map<std::string, Material> m_materials;
-	std::unordered_map<std::string, Mesh> m_meshes;
+	arr<RenderObject> m_drawable;
+	std::unordered_map<StrView, Material, StrHash> m_materials;
+	std::unordered_map<StrView, Mesh, StrHash> m_meshes;
 
 	GPUSceneData m_scene_params;
 	Buffer m_scene_params_buf;
 
 	UploadContext m_upload_ctx;
 
-	std::unordered_map<std::string, Texture> m_textures;
+	std::unordered_map<StrView, Texture, StrHash> m_textures;
 
 	//initializes everything in the engine
 	void init();
@@ -175,9 +176,9 @@ public:
 	void loadMeshes();
 	void uploadMesh(Mesh &mesh);
 
-	Material *makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string &name);
-	Material *getMaterial(const std::string &name);
-	Mesh *getMesh(const std::string &name);
+	Material *makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, StrView name);
+	Material *getMaterial(StrView name);
+	Mesh *getMesh(StrView name);
 
 	void drawObjects(VkCommandBuffer cmd, RenderObject *first, int count);
 
@@ -202,7 +203,7 @@ public:
 
 class PipelineBuilder {
 public:
-	std::vector<VkPipelineShaderStageCreateInfo> m_shader_stages;
+	arr<VkPipelineShaderStageCreateInfo> m_shader_stages;
 	VkPipelineVertexInputStateCreateInfo m_vtx_input;
 	VkPipelineInputAssemblyStateCreateInfo m_input_assembly;
 	VkViewport m_viewport;

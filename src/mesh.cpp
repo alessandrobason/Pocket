@@ -7,7 +7,8 @@
 
 #include <tiny_obj_loader.h>
 
-#include "utils.h"
+#include "std/common.h"
+#include "std/logging.h"
 
 VertexInDesc Vertex::getVertexDesc() {
 	VertexInDesc desc;

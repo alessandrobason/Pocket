@@ -4,7 +4,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <utils.h>
+#include "std/logging.h"
 
 bool vkutil::loadImage(VulkanEngine &engine, const char *fname, Image &out_image) {
     int w, h, c;
