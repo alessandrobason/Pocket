@@ -1,11 +1,12 @@
-﻿// vulkan_guide.h : Include file for standard system include files,
-// or project specific include files.
-
-#pragma once
+﻿#pragma once
 
 #include "mesh.h"
 
+// TODO remove tiny_obj_loader
+#include <vector>
+#include <string>
 #include <tiny_obj_loader.h>
+#include <vulkan/vulkan.h>
 
 #include "std/common.h"
 #include "std/logging.h"
@@ -13,30 +14,30 @@
 VertexInDesc Vertex::getVertexDesc() {
 	VertexInDesc desc;
 
-	desc.bindings.push_back({
+	desc.bindings.push(VkVertexInputBindingDescription{
 		.stride = sizeof(Vertex),
 		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
 	});
 
-	desc.attributes.push_back({
+	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 0,
 		.format = VK_FORMAT_R32G32B32_SFLOAT,
 		.offset = offsetof(Vertex, pos)
 	});
 
-	desc.attributes.push_back({
+	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 1,
 		.format = VK_FORMAT_R32G32B32_SFLOAT,
 		.offset = offsetof(Vertex, norm)
 	});
 
-	desc.attributes.push_back({
+	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 2,
 		.format = VK_FORMAT_R32G32B32_SFLOAT,
 		.offset = offsetof(Vertex, col)
 	});
 
-	desc.attributes.push_back({
+	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 3,
 		.format = VK_FORMAT_R32G32_SFLOAT,
 		.offset = offsetof(Vertex, uv)
@@ -73,6 +74,7 @@ bool Mesh::loadFromObj(const char *fname) {
 
 	for (const auto &shape : shapes) {
 		usize index_offset = 0;
+		
 		for (const auto &face : shape.mesh.num_face_vertices) {
 			usize fv = 3;
 
@@ -98,19 +100,12 @@ bool Mesh::loadFromObj(const char *fname) {
 					},
 				};
 
-				m_verts.push_back(new_vert);
+				verts.push(new_vert);
 			}
 
 			index_offset += fv;
 		}
 	}
 
-	for (usize s = 0; s < shapes.size(); ++s) {
-		usize index_offset = 0;
-		for (usize f = 0; f < shapes[s].mesh.num_face_vertices.size(); ++f) {
-
-		}
-	}
-
-	return false;
+	return true;
 }

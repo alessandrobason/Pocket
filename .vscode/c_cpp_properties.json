@@ -3,7 +3,16 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "C:\\Users\\alessandro.bason\\Desktop\\SDL-release-2.28.5\\src\\video\\khronos\\",
+                "third_party/vkbootstrap",
+                "third_party/glm/",
+                "third_party/imgui",
+                "third_party/sdl/include",
+                "third_party/stb_image",
+                "third_party/tinyobjloader",
+                "third_party/vma",
+                "third_party/volk"
             ],
             "defines": [
                 "_DEBUG",
@@ -13,7 +22,7 @@
             "windowsSdkVersion": "10.0.19041.0",
             "compilerPath": "cl.exe",
             "cStandard": "c23",
-            "cppStandard": "c++17",
+            "cppStandard": "c++20",
             "intelliSenseMode": "windows-msvc-x64"
         }
     ],

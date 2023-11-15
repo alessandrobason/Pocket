@@ -135,6 +135,8 @@ bool File::open(const char *fname, Mode mode) {
         FILE_ATTRIBUTE_NORMAL,
         nullptr
     );
+
+    return isValid();
 }
 
 void File::close() {

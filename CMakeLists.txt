@@ -1,9 +1,6 @@
-﻿# CMakeList.txt : CMake project for vulkan_guide, include source and define
-# project specific logic here.
-#
-cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required (VERSION 3.8)
 
-project ("vulkan_guide")
+project("pocket")
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -24,8 +21,6 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
   "${PROJECT_SOURCE_DIR}/shaders/*.vert"
   "${PROJECT_SOURCE_DIR}/shaders/*.comp"
 )
-
-message(> "${GLSL_SOURCE_FILES}")
 
 ## iterate each shader
 foreach(GLSL ${GLSL_SOURCE_FILES})

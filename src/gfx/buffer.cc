@@ -1,17 +1,19 @@
-﻿#include "vk_textures.h"
+#include "buffer.h"
 
-#include <vk_engine.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 
 #include "std/logging.h"
+#include "engine.h"
 
-bool vkutil::loadImage(VulkanEngine &engine, const char *fname, Image &out_image) {
+bool Texture::load(Engine &engine, const char *filename) {
     int w, h, c;
-    stbi_uc *pixels = stbi_load(fname, &w, &h, &c, STBI_rgb_alpha);
+    stbi_uc *pixels = stbi_load(filename, &w, &h, &c, STBI_rgb_alpha);
     
     if (!pixels) {
-        err("failed to load image %s", fname);
+        err("failed to load image %s", filename);
         return false;
     }
 
@@ -20,7 +22,10 @@ bool vkutil::loadImage(VulkanEngine &engine, const char *fname, Image &out_image
 
     Buffer staging = engine.makeBuffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
-    engine.writeGpuMemory(staging, (void *)pixels, image_size);
+	void *gpu_data;
+	vmaMapMemory(engine.m_allocator, staging.allocation, &gpu_data);
+	memcpy(gpu_data, pixels, image_size);
+	vmaUnmapMemory(engine.m_allocator, staging.allocation);
 
     stbi_image_free(pixels);
 
@@ -120,9 +125,9 @@ bool vkutil::loadImage(VulkanEngine &engine, const char *fname, Image &out_image
         }
     );
 
-    out_image = new_image;
+    image = new_image;
 
-    engine.m_main_delete_queue.push(vmaDestroyImage, engine.m_allocator, out_image.image, out_image.allocation);
+    engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, image.image, image.allocation);
     vmaDestroyBuffer(engine.m_allocator, staging.buffer, staging.allocation);
 
     return true;

@@ -37,6 +37,10 @@ namespace mem {
 		*temp = T(mem::move(args)...);
 	}
 
+	constexpr usize alignTo(usize value, usize alignment) {
+		return (value + alignment - 1) & ~(alignment - 1);
+	}
+
 	// WARNING does NOT work with virtual classes! vtable is not initialised
 	template<typename T>
 	struct ptr {

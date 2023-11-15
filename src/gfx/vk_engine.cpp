@@ -1210,7 +1210,7 @@ PipelineBuilder &PipelineBuilder::setViewport(
 	return *this;
 }
 
-PipelineBuilder &PipelineBuilder::setScissor(VkExtent2D  extent, VkOffset2D offset) {
+PipelineBuilder &PipelineBuilder::setScissor(VkExtent2D extent, VkOffset2D offset) {
 	m_scissor = {
 		.offset = offset,
 		.extent = extent,

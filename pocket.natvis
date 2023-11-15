@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="arr&lt;*&gt;">
+		<DisplayString>size={len}, capacity={cap}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>len</Size>
+				<ValuePointer>buf</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="Str">
+		<DisplayString>{buf,[len]}</DisplayString>
+		<StringView>buf,[len]</StringView>
+		<Expand>
+			<ArrayItems>
+				<Size>len</Size>
+				<ValuePointer>buf</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="StrView">
+		<DisplayString>{buf,[len]}</DisplayString>
+		<StringView>buf,[len]</StringView>
+		<Expand>
+			<ArrayItems>
+				<Size>len</Size>
+				<ValuePointer>buf</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+</AutoVisualizer>

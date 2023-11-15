@@ -14,7 +14,7 @@ struct Slice {
 	template<usize size>
 	Slice(const T(&buf)[size]) : buf(buf), len(size) {}
 	Slice(std::initializer_list<T> list) : buf(list.begin()), len(list.size()) {}
-	Slice(const arr<T> &list) : buf(list.buf()), len(list.size()) {}
+	Slice(const arr<T> &list) : buf(list.buf), len(list.len) {}
 
 	bool empty() const { return len == 0; }
 	const T *data() const { return buf;}
