@@ -3,6 +3,8 @@
 
 #include "gfx/engine.h"
 
+#include <iostream>
+
 int main(int argc, char* argv[]) {
 	Arena log_arena = Arena::make(gb(1));
 	trace::init(log_arena);
@@ -13,7 +15,7 @@ int main(int argc, char* argv[]) {
 	
 	engine.run();	
 
-	engine.cleanup();	
+	engine.cleanup();
 
 	return 0;
 }

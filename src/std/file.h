@@ -51,8 +51,18 @@ struct File {
     }
 
     template<typename T>
+    bool read(T &buf, usize count = 1) {
+        return read((void *)&buf, sizeof(T) * count);
+    }
+
+    template<typename T>
     bool write(const T *buf, usize count = 1) {
         return write((const void *)buf, sizeof(T) * count);
+    }
+
+    template<typename T>
+    bool write(const T &buf, usize count = 1) {
+        return write((const void *)&buf, sizeof(T) * count);
     }
 
     bool seekEnd();

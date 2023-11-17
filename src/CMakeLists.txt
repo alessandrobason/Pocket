@@ -4,10 +4,17 @@ file(GLOB PK_GFX   "gfx/*.h"     "gfx/*.cc")
 file(GLOB PK_UTILS "utils/*.h"   "utils/*.cc")
 file(GLOB PK_SRC   "*.h"         "*.cc")
 
+add_library(pocket_std STATIC)
+target_sources(pocket_std PRIVATE ${PK_STD})
+target_include_directories(pocket_std PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+
+add_library(pocket_formats STATIC)
+target_sources(pocket_formats PRIVATE ${PK_FMT})
+target_include_directories(pocket_formats PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(pocket_formats PRIVATE pocket_std json lz4)
+
 # Add source to this project's executable.
 add_executable(pocket
-    ${PK_STD}
-    ${PK_FMT}
     ${PK_GFX}
     ${PK_UTILS}
 	${PK_SRC}
@@ -23,6 +30,6 @@ source_group("src"     FILES ${PK_SRC})
 set_property(TARGET pocket PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:pocket>")
 
 target_include_directories(pocket PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(pocket PRIVATE vkbootstrap vma glm tinyobjloader imgui stb_image)
+target_link_libraries(pocket PRIVATE pocket_std pocket_formats vkbootstrap vma glm tinyobjloader imgui stb_image)
 
 add_dependencies(pocket Shaders)

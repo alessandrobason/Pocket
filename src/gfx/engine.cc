@@ -12,6 +12,7 @@
 
 #include "std/logging.h"
 #include "std/mem.h"
+#include "std/file.h"
 
 #include "mesh.h"
 #include "pipeline_builder.h"
@@ -144,28 +145,12 @@ void Engine::immediateSubmit(std::function<void(VkCommandBuffer)> &&fun) {
 }
 
 VkShaderModule Engine::loadShaderModule(const char *path) {
-    // TODO use file.h
-	FILE *fp = nullptr;
-	errno_t error = fopen_s(&fp, path, "rb");
-	if (error) {
-		err("couldn't open file %s: %d", path, error);
-		return nullptr;
-	}
-
-	fseek(fp, 0, SEEK_END);
-	size_t file_len = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-
-	u8 *buf = (u8 *)calloc(file_len, 1);
-	assert(buf);
-
-	fread(buf, 1, file_len, fp);
-	fclose(fp);
+	arr<byte> data = File::readWhole(path);
 
 	VkShaderModuleCreateInfo info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = file_len,
-		.pCode = (u32 *)buf,
+		.codeSize = data.len,
+		.pCode = (u32 *)data.buf,
 	};
 
 	VkShaderModule module;
@@ -173,7 +158,6 @@ VkShaderModule Engine::loadShaderModule(const char *path) {
 		module = nullptr;
 	}
 
-	free(buf);
 	return module;
 }
 

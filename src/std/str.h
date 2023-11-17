@@ -45,7 +45,7 @@ struct Str {
 
     char *data();
     const char *data() const;
-    const char *c_str() const;
+    const char *cstr() const;
     usize size() const;
     bool isOwned() const;
 

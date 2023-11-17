@@ -206,7 +206,7 @@ u64 File::getTime() {
 u64 File::getTime(const char *path) {
     if (!path) return 0;
     // TODO linux
-    assert(false);
+    pk_assert(false);
 }
 
 bool File::exists(const char *fname) {
@@ -274,7 +274,7 @@ usize File::getSize() {
 u64 File::getTime() {
     if (!isValid()) return 0;
     // TODO linux
-    assert(false);
+    pk_assert(false);
 }
 
 #endif

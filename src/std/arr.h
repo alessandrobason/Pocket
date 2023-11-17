@@ -63,6 +63,12 @@ struct arr {
 		return buf[len++];
 	}
 
+	T &push(const T &value) {
+		reserve(len + 1);
+		mem::placementNew<T>(buf + len, value);
+		return buf[len++];
+	}
+
 	void fill(const T &value) {
 		for (usize i = 0; i < len; ++i) {
 			buf[i] = value;

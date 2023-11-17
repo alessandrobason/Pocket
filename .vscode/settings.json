@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.yarnproject": "jsonc",
         "cstdlib": "cpp",
         "xlocinfo": "cpp",
         "charconv": "cpp",
@@ -70,6 +71,26 @@
         "xlocmon": "cpp",
         "xlocnum": "cpp",
         "xloctime": "cpp",
-        "xstddef": "cpp"
+        "xstddef": "cpp",
+        "filesystem": "cpp",
+        "any": "cpp",
+        "array": "cpp",
+        "codecvt": "cpp",
+        "iostream": "cpp",
+        "numeric": "cpp",
+        "ranges": "cpp",
+        "span": "cpp",
+        "valarray": "cpp",
+        "cimport.h": "c",
+        "scene.h": "c",
+        "regex": "cpp",
+        "bitset": "cpp",
+        "cinttypes": "cpp",
+        "queue": "cpp",
+        "random": "cpp",
+        "set": "cpp",
+        "stack": "cpp",
+        "unordered_set": "cpp",
+        "variant": "cpp"
     },
 }

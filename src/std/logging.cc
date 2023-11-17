@@ -48,7 +48,11 @@ namespace trace {
             abort();
         }
 
-        char *buf = scratch.alloc<char>(len + 1);
+        char *buf = scratch.alloc<char>(len + 1, Arena::SoftFail);
+        if (!buf) {
+            printf("[ERR]: trying to print string of length %d, which is more than what the arena can handle", len + 1);
+            return;
+        }
         len = vsnprintf(buf, len + 1, fmt, args);
 
         trace__set_level_colour(level);

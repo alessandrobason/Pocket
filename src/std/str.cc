@@ -132,6 +132,8 @@ void Str::resize(usize new_len) {
     pk_assert(newbuf);
     buf = newbuf;
     bool owned = isOwned();
+    // set the rest of the string to zero from the previos null terminator
+    memset(buf + len + 1, 0, new_len - len);
     len = new_len;
     if (owned) len |= str_not_owned_flags;
 }
@@ -210,7 +212,7 @@ const char *Str::data() const {
     return buf;
 }
 
-const char *Str::c_str() const {
+const char *Str::cstr() const {
     return buf;
 }
 

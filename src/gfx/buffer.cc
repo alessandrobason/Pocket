@@ -1,44 +1,24 @@
 #include "buffer.h"
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
 #include "std/logging.h"
+#include "formats/assets.h"
 #include "engine.h"
 
-bool Texture::load(Engine &engine, const char *filename) {
-    int w, h, c;
-    stbi_uc *pixels = stbi_load(filename, &w, &h, &c, STBI_rgb_alpha);
-    
-    if (!pixels) {
-        err("failed to load image %s", filename);
-        return false;
-    }
-
-    VkDeviceSize image_size = w * h * 4;
-    VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
-
-    Buffer staging = engine.makeBuffer(image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
-	void *gpu_data;
-	vmaMapMemory(engine.m_allocator, staging.allocation, &gpu_data);
-	memcpy(gpu_data, pixels, image_size);
-	vmaUnmapMemory(engine.m_allocator, staging.allocation);
-
-    stbi_image_free(pixels);
-
+static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &engine, Buffer &staging_buf) {
     VkExtent3D image_extent = {
-        .width = (u32)w,
-        .height = (u32)h,
+        .width = width,
+        .height = height,
         .depth = 1,
     };
 
     VkImageCreateInfo img_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = image_format,
+        .format = format,
         .extent = image_extent,
         .mipLevels = 1,
         .arrayLayers = 1,
@@ -55,7 +35,7 @@ bool Texture::load(Engine &engine, const char *filename) {
     vmaCreateImage(engine.m_allocator, &img_info, &alloc_info, &new_image.image, &new_image.allocation, nullptr);
 
     engine.immediateSubmit(
-        [&new_image, &staging, &image_extent]
+        [&new_image, &staging_buf, &image_extent]
         (VkCommandBuffer cmd) {
             VkImageSubresourceRange range = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -98,7 +78,7 @@ bool Texture::load(Engine &engine, const char *filename) {
 
             vkCmdCopyBufferToImage(
                 cmd,
-                staging.buffer,
+                staging_buf.buffer,
                 new_image.image,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1,
@@ -125,10 +105,42 @@ bool Texture::load(Engine &engine, const char *filename) {
         }
     );
 
-    image = new_image;
+    engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, new_image.image, new_image.allocation);
+    vmaDestroyBuffer(engine.m_allocator, staging_buf.buffer, staging_buf.allocation);
 
-    engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, image.image, image.allocation);
-    vmaDestroyBuffer(engine.m_allocator, staging.buffer, staging.allocation);
+    return new_image;
+}
+
+bool Texture::load(Engine &engine, const char *filename) {
+    AssetFile file;
+    if (!file.load(filename)) {
+        err("failed to load asset file %s", filename);
+        return false;
+    }
+
+    AssetTexture info = AssetTexture::readInfo(file);
+
+    VkDeviceSize image_size = info.byte_size;
+    VkFormat image_format;
+    switch (info.format) {
+        case AssetTexture::Rgba8:
+            image_format = VK_FORMAT_R8G8B8A8_UNORM;
+            break;
+        default:
+            err("unrecognised texture format: %u", info.format);
+            return false;
+    }
+
+    Buffer staging_buf = engine.makeBuffer(info.byte_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+    void *data;
+    vmaMapMemory(engine.m_allocator, staging_buf.allocation, &data);
+
+    info.unpack(file.blob, (byte *)data);
+
+    vmaUnmapMemory(engine.m_allocator, staging_buf.allocation);
+
+    image = texture__upload(info.pixel_size[0], info.pixel_size[1], image_format, engine, staging_buf);
 
     return true;
 }
