@@ -1,7 +1,10 @@
 ﻿#pragma once
 
+#include <glm/mat4x4.hpp>
+
 #include "std/arr.h"
-#include "utils/glm.h"
+#include "std/vec.h"
+// #include "utils/glm.h"
 
 #include "vk_fwd.h"
 #include "buffer.h"
@@ -37,7 +40,7 @@ struct Mesh {
 
 	struct PushConstants {
 		vec4 data;
-		mat4 model;
+		glm::mat4 model;
 	};
 };
 

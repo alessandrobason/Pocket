@@ -17,6 +17,7 @@
 #include "mesh.h"
 #include "pipeline_builder.h"
 #include "camera.h"
+#include "core/input.h"
 #include "formats/ini.h"
 
 #define PK_VKCHECK(x) \
@@ -95,9 +96,12 @@ void Engine::run() {
 
 	//main loop
 	while (!should_quit) {
+		inputNewFrame();
+
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
 			ImGui_ImplSDL2_ProcessEvent(&e);
+			inputEvent(e);
 			
 			//close the window when user alt-f4s or clicks the X button			
 			if (e.type == SDL_QUIT) {
@@ -106,11 +110,22 @@ void Engine::run() {
 
 		}
 
+		if (isKeyPressed(Key::Escape)) {
+			should_quit = true;
+		}
+
+		m_cam.update();
+
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplSDL2_NewFrame(m_window);
 		ImGui::NewFrame();
 
 		ImGui::ShowDemoWindow();
+
+		ImGui::LabelText("Camera Position", "%.2f %.2f %.2f", m_cam.pos.x, m_cam.pos.y, m_cam.pos.z);
+		ImGui::LabelText("Camera Rotation", "%.2f %.2f", m_cam.pitch, m_cam.yaw);
+		ImGui::LabelText("Mouse Position", "%d %d", getMousePos().x, getMousePos().y);
+		ImGui::LabelText("Mouse Relative", "%d %d", getMouseRel().x, getMouseRel().y);
 
 		draw();
 	}
@@ -735,13 +750,13 @@ void Engine::initDescriptors() {
 
 void Engine::initScene() {
     loadMesh("../../assets/imported/monkey_smooth.mesh", "monkey");
-    loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
-    loadMesh("../../assets/imported/triangle.mesh", "triangle");
+    // loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
+    // loadMesh("../../assets/imported/triangle.mesh", "triangle");
 
     RenderObject map = {
         .mesh = getMesh("monkey"),
         .material = getMaterial("texturedmesh"),
-		.matrix = mat4(1),
+		.matrix = glm::mat4(1),
     };
 	m_drawable.push(map);
 
@@ -1013,8 +1028,9 @@ void Engine::draw() {
 }
 
 void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
-	glm::vec3 cam_pos = { 0, -20, -20 };
-	glm::mat4 view = glm::translate(glm::mat4(1), cam_pos);
+	// glm::vec3 cam_pos = { 0, -20, -20 };
+	// glm::mat4 view = glm::translate(glm::mat4(1), cam_pos);
+	glm::mat4 view = m_cam.getView();
 	glm::mat4 proj = glm::perspective(
 		glm::radians(70.f),
 		(float)(m_window_width) / (float)(m_window_height),

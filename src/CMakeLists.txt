@@ -1,7 +1,8 @@
-file(GLOB PK_STD   "std/*.h" "std/*.cc")
+file(GLOB PK_STD   "std/*.h"     "std/*.cc")
 file(GLOB PK_FMT   "formats/*.h" "formats/*.cc")
 file(GLOB PK_GFX   "gfx/*.h"     "gfx/*.cc")
 file(GLOB PK_UTILS "utils/*.h"   "utils/*.cc")
+file(GLOB PK_CORE  "core/*.h"    "core/*.cc")
 file(GLOB PK_SRC   "*.h"         "*.cc")
 
 add_library(pocket_std STATIC)
@@ -17,6 +18,7 @@ target_link_libraries(pocket_formats PRIVATE pocket_std json lz4)
 add_executable(pocket
     ${PK_GFX}
     ${PK_UTILS}
+	${PK_CORE}
 	${PK_SRC}
     "../pocket.natvis"
 )

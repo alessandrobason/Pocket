@@ -2,17 +2,20 @@
 
 // TODO remove this
 #include <functional>
+#include <glm/mat4x4.hpp>
 
 #include "std/arr.h"
 #include "std/str.h"
 #include "std/slice.h"
 #include "std/hashmap.h"
+#include "std/vec.h"
 
-#include "utils/glm.h"
+// #include "utils/glm.h"
 
 #include "vk_fwd.h"
 #include "buffer.h"
 #include "mesh.h"
+#include "camera.h"
 
 // constants
 constexpr uint kframe_overlap = 2;
@@ -106,11 +109,11 @@ struct Engine {
     struct RenderObject {
         Mesh *mesh;
         Material *material;
-        mat4 matrix = mat4(1);
+        glm::mat4 matrix = glm::mat4(1);
     };
 
     struct ObjectData {
-        mat4 model;
+        glm::mat4 model;
     };
 
     // -- variables --
@@ -157,4 +160,6 @@ struct Engine {
 	Buffer m_scene_params_buf;
 
 	UploadContext m_upload_ctx;
+
+    Camera m_cam;
 };
