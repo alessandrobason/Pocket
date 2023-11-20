@@ -173,10 +173,12 @@ Material *Engine::getMaterial(StrView name) {
 	return m_materials.get(name);
 }
 
-Mesh *Engine::loadMesh(const char *obj_path, StrView name) {
+Mesh *Engine::loadMesh(const char *asset_path, StrView name) {
 	Mesh mesh;
-	mesh.loadFromObj(obj_path);
-	uploadMesh(mesh);
+	mesh.load(asset_path);
+	mesh.upload(*this);
+	//mesh.loadFromObj(obj_path);
+	// uploadMesh(mesh);
 	return m_meshes.push(name, mesh);
 }
 
@@ -732,12 +734,14 @@ void Engine::initDescriptors() {
 }
 
 void Engine::initScene() {
-    Mesh *monkey = loadMesh("../../assets/monkey_smooth.obj", "monkey");
-    Mesh *lost_empire = loadMesh("../../assets/lost_empire.obj", "lost_empire");
+    loadMesh("../../assets/imported/monkey_smooth.mesh", "monkey");
+    loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
+    loadMesh("../../assets/imported/triangle.mesh", "triangle");
 
     RenderObject map = {
-        .mesh = lost_empire,
+        .mesh = getMesh("monkey"),
         .material = getMaterial("texturedmesh"),
+		.matrix = mat4(1),
     };
 	m_drawable.push(map);
 
@@ -844,7 +848,7 @@ void Engine::initImGui() {
 
 void Engine::loadImages() {
 	Texture lost_empire;
-    lost_empire.load(*this, "../../assets/lost_empire-RGBA.png");
+    lost_empire.load(*this, "../../assets/imported/lost_empire-RGBA.tx");
 
 	VkImageViewCreateInfo image_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -865,6 +869,7 @@ void Engine::loadImages() {
 	m_textures.push("empire_diffuse", lost_empire);
 }
 
+#if 0
 void Engine::uploadMesh(Mesh &mesh) {
 	const size_t buffer_size = mesh.verts.byteSize();
 
@@ -919,6 +924,7 @@ void Engine::uploadMesh(Mesh &mesh) {
 
 	vmaDestroyBuffer(m_allocator, staging_buffer.buffer, staging_buffer.allocation);
 }
+#endif
 
 void Engine::draw() {
 	ImGui::Render();
@@ -1007,7 +1013,7 @@ void Engine::draw() {
 }
 
 void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
-	glm::vec3 cam_pos = { 0, -20, -10 };
+	glm::vec3 cam_pos = { 0, -20, -20 };
 	glm::mat4 view = glm::translate(glm::mat4(1), cam_pos);
 	glm::mat4 proj = glm::perspective(
 		glm::radians(70.f),
@@ -1024,7 +1030,6 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 		.proj = proj,
 		.viewproj = proj * view,
 	};
-
 
 	void *gpu_data;
 	vmaMapMemory(m_allocator, frame.camera_buf.allocation, &gpu_data);
@@ -1054,7 +1059,6 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 	}
 
 	vmaUnmapMemory(m_allocator, frame.object_buf.allocation);
-
 
 	Mesh *last_mesh = nullptr;
 	Material *last_material = nullptr;
@@ -1121,13 +1125,20 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 			vkCmdBindVertexBuffers(
 				cmd,
 				0, 1,
-				&obj.mesh->buffer.buffer,
+				&obj.mesh->vbuf.buffer,
 				&offset
+			);
+			vkCmdBindIndexBuffer(
+				cmd,
+				obj.mesh->ibuf.buffer,
+				0,
+				VK_INDEX_TYPE_UINT32
 			);
 			last_mesh = obj.mesh;
 		}
 
-		vkCmdDraw(cmd, (u32)obj.mesh->verts.size(), 1, 0, (u32)i);
+		vkCmdDrawIndexed(cmd, (u32)obj.mesh->indices.size(), 1, 0, 0, (u32)i);
+		//vkCmdDraw(cmd, (u32)obj.mesh->verts.size(), 1, 0, (u32)i);
 	}
 }
 

@@ -22,11 +22,18 @@ struct Vertex {
 	static VertexInDesc getVertexDesc();
 };
 
+using Index = u32;
+
 struct Mesh {
 	arr<Vertex> verts;
-	Buffer buffer;
+	arr<Index> indices;
+	Buffer vbuf;
+	Buffer ibuf;
 
 	bool loadFromObj(const char *fname);
+	bool load(const char *fname);
+
+	void upload(Engine &engine);
 
 	struct PushConstants {
 		vec4 data;

@@ -238,7 +238,7 @@ static void convertMesh(const fs::path &fname) {
     fs::path out = fs::path("imported") / fname.filename();
     out.replace_extension(".mesh");
 
-    if (fs::exists(out) && !shouldReplace(fname, out)) {
+    if (fname != ".\\triangle.obj" && fs::exists(out) && !shouldReplace(fname, out)) {
         info("no need to convert file, input is older than output");
         return;
     }
@@ -261,6 +261,10 @@ static void convertMesh(const fs::path &fname) {
 
     processNode(scene->mRootNode, scene, mesh);
 
+    for (u32 i : mesh.ind32) {
+        info("%u", i);
+    }
+
     Slice<byte> indices;
     u8 index_size = 0;
 
@@ -278,6 +282,7 @@ static void convertMesh(const fs::path &fname) {
     }
 
     assert(((int)mesh.ind8.empty() + (int)mesh.ind16.empty() + (int)mesh.ind32.empty()) == 2);
+    assert(index_size == sizeof(u32));
 
     aiVector3D scale = (mesh.bounding.mMax - mesh.bounding.mMin) / 2.f;
     aiVector3D origin = scale + mesh.bounding.mMin;

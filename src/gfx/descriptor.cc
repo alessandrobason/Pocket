@@ -259,7 +259,7 @@ VkDescriptorSet DescriptorBuilder::build(VkDescriptorSetLayout &layout) {
     });
 
     if (!allocator.allocate(set, layout)) {
-        return false;
+        return nullptr;
     }
 
     for (VkWriteDescriptorSet &w : writes) {

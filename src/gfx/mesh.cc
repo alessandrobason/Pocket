@@ -7,9 +7,13 @@
 #include <string>
 #include <tiny_obj_loader.h>
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 
 #include "std/common.h"
 #include "std/logging.h"
+
+#include "formats/assets.h"
+#include "engine.h"
 
 VertexInDesc Vertex::getVertexDesc() {
 	VertexInDesc desc;
@@ -108,4 +112,92 @@ bool Mesh::loadFromObj(const char *fname) {
 	}
 
 	return true;
+}
+
+bool Mesh::load(const char *fname) {
+	AssetFile file;
+	if (!file.load(fname)) {
+		err("failed to load asset file %s", fname);
+		return false;
+	}
+
+	AssetMesh info = AssetMesh::readInfo(file);
+	static_assert(sizeof(Vertex) == sizeof(AssetMesh::Vertex));
+	
+	verts.resize(info.vbuf_size);
+	indices.resize(info.ibuf_size / info.index_size);
+
+	info.unpack(file.blob, (byte *)verts.data(), (byte *)indices.data());
+
+	return true;
+}
+
+#define PK_VKCHECK(x) \
+    do { \
+        VkResult err = x; \
+        if(err) { \
+            fatal("%s: Vulkan error: %d", #x, err);  \
+        } \
+    } while (0)
+
+Buffer mesh__upload(Engine &engine, VkBufferUsageFlagBits vert_or_ind, const void *data, usize size) {
+	Buffer outbuf;
+	
+	VkBufferCreateInfo buf_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = (u32)size,
+		.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	};
+
+	VmaAllocationCreateInfo alloc_info = {
+		.usage = VMA_MEMORY_USAGE_CPU_ONLY,
+	};
+
+	Buffer staging_buffer;
+
+	PK_VKCHECK(vmaCreateBuffer(
+		engine.m_allocator,
+		&buf_info,
+		&alloc_info,
+		&staging_buffer.buffer,
+		&staging_buffer.allocation,
+		nullptr
+	));
+
+	void *gpu_data;
+	vmaMapMemory(engine.m_allocator, staging_buffer.allocation, &gpu_data);
+	memcpy(gpu_data, data, size);
+	vmaUnmapMemory(engine.m_allocator, staging_buffer.allocation);
+
+	buf_info.usage = vert_or_ind | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+	PK_VKCHECK(vmaCreateBuffer(
+		engine.m_allocator,
+		&buf_info,
+		&alloc_info,
+		&outbuf.buffer,
+		&outbuf.allocation,
+		nullptr
+	));
+	engine.m_delete_queue.push(vmaDestroyBuffer, engine.m_allocator, outbuf.buffer, outbuf.allocation);
+
+	engine.immediateSubmit(
+		[&size, &staging_buffer, &outbuf]
+		(VkCommandBuffer cmd) {
+			VkBufferCopy copy = {
+				.size = size,
+			};
+			vkCmdCopyBuffer(cmd, staging_buffer.buffer, outbuf.buffer, 1, &copy);
+		}
+	);
+
+	vmaDestroyBuffer(engine.m_allocator, staging_buffer.buffer, staging_buffer.allocation);
+
+	return outbuf;
+}
+
+void Mesh::upload(Engine &engine) {
+	vbuf = mesh__upload(engine, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
+	ibuf = mesh__upload(engine, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());
 }

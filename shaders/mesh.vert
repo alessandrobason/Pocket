@@ -1,14 +1,14 @@
 #version 460
 
-layout (location=0) in vec3 pos;
-layout (location=1) in vec3 norm;
-layout (location=2) in vec3 col;
-layout (location=3) in vec2 uv;
+layout (location = 0) in vec3 pos;
+layout (location = 1) in vec3 norm;
+layout (location = 2) in vec3 col;
+layout (location = 3) in vec2 uv;
 
-layout (location=0) out vec3 out_colour;
-layout (location=1) out vec3 out_normal;
-layout (location=2) out vec2 out_uv;
-layout (location=3) out vec3 frag_pos;
+layout (location = 0) out vec3 out_colour;
+layout (location = 1) out vec3 out_normal;
+layout (location = 2) out vec2 out_uv;
+layout (location = 3) out vec3 frag_pos;
 // layout (location=3) out float time;
 
 layout(set=0, binding=0) uniform CameraBuffer {

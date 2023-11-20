@@ -49,7 +49,7 @@ struct Engine {
     Material *makeMaterial(VkPipeline pipeline, VkPipelineLayout layout, StrView name);
     Material *getMaterial(StrView name);
 
-    Mesh *loadMesh(const char *obj_path, StrView name);
+    Mesh *loadMesh(const char *asset_path, StrView name);
     Mesh *getMesh(StrView name);
 
     Buffer makeBuffer(usize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
@@ -69,7 +69,7 @@ struct Engine {
     void initImGui();
 
     void loadImages();
-    void uploadMesh(Mesh &mesh);
+    // void uploadMesh(Mesh &mesh);
 
     void draw();
     void drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects);
