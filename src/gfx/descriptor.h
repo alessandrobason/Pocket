@@ -6,6 +6,8 @@
 #include "std/hashmap.h"
 #include "std/pair.h"
 
+#include "vk_ptr.h"
+
 struct DescriptorAllocator {
     struct PoolSizes {
         arr<pair<VkDescriptorType, float>> sizes = {
@@ -27,7 +29,7 @@ struct DescriptorAllocator {
     bool allocate(VkDescriptorSet &set, VkDescriptorSetLayout layout);
 
     void init(VkDevice new_device);
-    void cleanup();
+    //void cleanup();
 
     VkDevice device;
 
@@ -36,13 +38,13 @@ private:
 
     VkDescriptorPool current_pool = nullptr;
     PoolSizes descriptor_sizes;
-    arr<VkDescriptorPool> used_pools;
-    arr<VkDescriptorPool> free_pools;
+    arr<vkptr<VkDescriptorPool>> used_pools;
+    arr<vkptr<VkDescriptorPool>> free_pools;
 };
 
 struct DescriptorLayoutCache {
     void init(VkDevice new_device);
-    void cleanup();
+    //void cleanup();
 
     VkDescriptorSetLayout createDescLayout(const VkDescriptorSetLayoutCreateInfo &info);
 
@@ -56,7 +58,7 @@ struct DescriptorLayoutCache {
 
 private:
     // TODO use actual hashmap
-    HashMap<DescriptorLayoutInfo, VkDescriptorSetLayout> layout_cache;
+    HashMap<DescriptorLayoutInfo, vkptr<VkDescriptorSetLayout>> layout_cache;
     VkDevice device;
 };
 

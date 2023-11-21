@@ -131,20 +131,32 @@ PipelineBuilder &PipelineBuilder::setDepthStencil(VkCompareOp operation) {
 	return *this;
 }
 
+PipelineBuilder &PipelineBuilder::setDynamicState(Slice<VkDynamicState> dynamic_states) {
+	m_dyn_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		.dynamicStateCount = (u32)dynamic_states.len,
+		.pDynamicStates = dynamic_states.buf,
+	};
+	return *this;
+}
 
-VkPipeline PipelineBuilder::build(VkDevice device, VkRenderPass pass) {
+vkptr<VkPipeline> PipelineBuilder::build(VkDevice device, VkRenderPass pass) {
 	for (auto &stage : m_shader_stages) {
 		stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	}
+
+	Slice<VkDynamicState> dyn_state = { m_dyn_create_info.pDynamicStates, m_dyn_create_info.dynamicStateCount };
+	bool dynamic_viewport = dyn_state.contains(VK_DYNAMIC_STATE_VIEWPORT);
+	bool dynamic_scissor = dyn_state.contains(VK_DYNAMIC_STATE_SCISSOR);
 
 	// make viewport state from our stored viewport and scissor.
 	// at the moment we won't support multiple viewports or scissors
 	VkPipelineViewportStateCreateInfo viewport_state = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		.viewportCount = 1,
-		.pViewports = &m_viewport,
+		.pViewports = dynamic_viewport ? nullptr : &m_viewport,
 		.scissorCount = 1,
-		.pScissors = &m_scissor,
+		.pScissors = dynamic_scissor ? nullptr : &m_scissor,
 	};
 
 	// setup dummy color blending. We aren't using transparent objects yet
@@ -168,6 +180,7 @@ VkPipeline PipelineBuilder::build(VkDevice device, VkRenderPass pass) {
 		.pMultisampleState = &m_multisampling,
 		.pDepthStencilState = &m_depth_stencil,
 		.pColorBlendState = &colour_blending,
+		.pDynamicState = &m_dyn_create_info,
 		.layout = m_layout,
 		.renderPass = pass,
 	};

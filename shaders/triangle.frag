@@ -28,4 +28,5 @@ void main() {
 #endif
     const vec4 tex_col = texture(tex_sampler, in_uv);
     out_colour = tex_col;
+    //out_colour = vec4(tex_col * in_colour, 1);
 }

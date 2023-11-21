@@ -1,23 +1,27 @@
 #pragma once
 
 #include "vk_fwd.h"
+#include "vk_ptr.h"
 
 // forward declarations 
 struct Engine;
 
-struct Buffer {
-	VkBuffer buffer;
-	VmaAllocation allocation;
-};
+using Buffer = vkptr<VkBuffer>;
+using Image = vkptr<VkImage>;
 
-struct Image {
-	VkImage image;
-	VmaAllocation allocation;
-};
+// struct Buffer {
+// 	VkBuffer buffer;
+// 	VmaAllocation allocation;
+// };
+
+// struct Image {
+// 	VkImage image;
+// 	VmaAllocation allocation;
+// };
 
 struct Texture {
 	Image image;
-	VkImageView view;
+	vkptr<VkImageView> view;
 
 	bool load(Engine &engine, const char *filename);
 };

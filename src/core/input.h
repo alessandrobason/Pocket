@@ -5,6 +5,7 @@
 enum class Key {
     None,
     W, A, S, D,
+    Q, E,
     Shift, Ctrl,
     Escape,
 

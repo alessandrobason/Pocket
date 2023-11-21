@@ -66,9 +66,11 @@ void inputEvent(const union SDL_Event &event) {
             keys[(int)sdl__to_key(event.key.keysym.sym)] = false;
             break;
         case SDL_MOUSEBUTTONDOWN:
+            info("down: %u", event.button.button);
             mouse_btns[(int)sdl__to_mouse(event.button.button)] = true;
             break;
         case SDL_MOUSEBUTTONUP:
+            info("up: %u", event.button.button);
             mouse_btns[(int)sdl__to_mouse(event.button.button)] = false;
             break;
         case SDL_MOUSEMOTION:
@@ -83,6 +85,8 @@ static Key sdl__to_key(SDL_Keycode code) {
         case SDLK_a: return Key::A;        
         case SDLK_s: return Key::S;        
         case SDLK_d: return Key::D;
+        case SDLK_q: return Key::Q;
+        case SDLK_e: return Key::E;
         case SDLK_LSHIFT: // fallthrough
         case SDLK_RSHIFT: return Key::Shift;
         case SDLK_LCTRL: // fallthrough
@@ -94,5 +98,11 @@ static Key sdl__to_key(SDL_Keycode code) {
 }
 
 static Mouse sdl__to_mouse(u8 button) {
-    return (Mouse)math::min(button, (u8)((int)Mouse::__count - 1));
+    switch (button) {
+        case 1: return Mouse::Left;
+        case 2: return Mouse::Middle;
+        case 3: return Mouse::Right;
+    }
+
+    return Mouse::None;
 }

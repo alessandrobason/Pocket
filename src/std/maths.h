@@ -6,12 +6,12 @@ namespace math {
 
 	template<typename T>
 	constexpr T toRad(T deg) {
-		return deg * pi / 180.f;
+		return deg * (pi / 180.f);
 	}
 
 	template<typename T>
 	constexpr T toDeg(T rad) {
-		return rad * 180.f / pi;
+		return rad * (180.f / pi);
 	}
 
 	template<typename T>

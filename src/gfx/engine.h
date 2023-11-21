@@ -13,6 +13,7 @@
 // #include "utils/glm.h"
 
 #include "vk_fwd.h"
+#include "vk_ptr.h"
 #include "buffer.h"
 #include "mesh.h"
 #include "camera.h"
@@ -22,18 +23,6 @@ constexpr uint kframe_overlap = 2;
 
 // Forward declare SDL stuff
 struct SDL_Window;
-
-// stupid simple deletion queue, probably need something better
-struct DeletionQueue {
-	arr<std::function<void()>> m_deleters;
-
-	template<typename Fn, typename ...Targs>
-	void push(Fn &&fn, Targs &&...args) {
-		m_deleters.push(std::bind(fn, args...));
-	}
-
-	void flush();
-};
 
 struct Engine {
     // forward declare
@@ -71,6 +60,8 @@ struct Engine {
     void initScene();
     void initImGui();
 
+    void resizeWindow(int new_width, int new_height);
+
     void loadImages();
     // void uploadMesh(Mesh &mesh);
 
@@ -81,10 +72,10 @@ struct Engine {
 
     // -- types --
     struct FrameData {
-        VkSemaphore present_sem;
-        VkSemaphore render_sem;
-        VkFence render_fence;
-        VkCommandPool cmd_pool;
+        vkptr<VkSemaphore> present_sem;
+        vkptr<VkSemaphore> render_sem;
+        vkptr<VkFence> render_fence;
+        vkptr<VkCommandPool> cmd_pool;
         VkCommandBuffer cmd_buf;
         Buffer camera_buf;
         VkDescriptorSet global_descriptor;
@@ -101,8 +92,8 @@ struct Engine {
     };
 
     struct UploadContext {
-        VkFence fence;
-        VkCommandPool pool;
+        vkptr<VkFence> fence;
+        vkptr<VkCommandPool> pool;
         VkCommandBuffer buffer;
     };
 
@@ -121,35 +112,39 @@ struct Engine {
     uint m_window_width = 800;
     uint m_window_height = 600;
     SDL_Window *m_window = nullptr;
-    VkInstance m_instance = nullptr;
-	VkDebugUtilsMessengerEXT m_debug_messenger = nullptr;
-	VkPhysicalDevice m_chosen_gpu = nullptr;
-	VkDevice m_device = nullptr;
-	VkSurfaceKHR m_surface = nullptr;
-	VkSwapchainKHR m_swapchain = nullptr;
+    vkptr<VkInstance> m_instance;
+	vkptr<VkDebugUtilsMessengerEXT> m_debug_messenger;
+	VkPhysicalDevice m_chosen_gpu;
+	vkptr<VkDevice> m_device;
+	vkptr<VkSurfaceKHR> m_surface;
+    vkptr<VkSwapchainKHR> m_swapchain;
 	VkFormat m_swapchain_img_format;
 	arr<VkImage> m_swapchain_images;
-	arr<VkImageView> m_swapchain_img_views;
+	arr<vkptr<VkImageView>> m_swapchain_img_views;
 	VkFwd_PhysicalDeviceProperties m_gpu_properties;
-	VmaAllocator m_allocator;
-	DeletionQueue m_delete_queue;
+	vkptr<VmaAllocator> m_allocator;
+	vkptr<VkDescriptorPool> m_imgui_pool;
 
 	VkQueue m_gfxqueue = nullptr;
 	u32 m_gfxqueue_family = 0;
 
     FrameData m_frames[kframe_overlap];
 
-	VkRenderPass m_render_pass;
-	arr<VkFramebuffer> m_framebuffers;
+	vkptr<VkRenderPass> m_render_pass;
+	arr<vkptr<VkFramebuffer>> m_framebuffers;
     
 	Image m_depth_img;
-	VkImageView m_depth_view;
+	vkptr<VkImageView> m_depth_view;
 	VkFormat m_depth_format;
 
-	VkDescriptorSetLayout m_global_set_layout;
-	VkDescriptorSetLayout m_object_set_layout;
-	VkDescriptorSetLayout m_single_texture_set_layout;
-	VkDescriptorPool m_descriptor_pool;
+	vkptr<VkDescriptorSetLayout> m_global_set_layout;
+	vkptr<VkDescriptorSetLayout> m_object_set_layout;
+	vkptr<VkDescriptorSetLayout> m_single_texture_set_layout;
+	vkptr<VkDescriptorPool> m_descriptor_pool;
+
+    arr<vkptr<VkPipeline>> m_pipeline_cache;
+    arr<vkptr<VkPipelineLayout>> m_pipeline_layout_cache;
+    arr<vkptr<VkSampler>> m_sampler_cache;
     
 	arr<RenderObject> m_drawable;
 	HashMap<StrView, Material> m_materials;

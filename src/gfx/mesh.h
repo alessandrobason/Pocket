@@ -45,7 +45,7 @@ struct Mesh {
 };
 
 struct Material {
-	VkPipeline pipeline;
-	VkPipelineLayout layout;
+	VkPipeline pipeline_ref;
+	VkPipelineLayout layout_ref;
 	VkDescriptorSet texture_set = nullptr;
 };

@@ -4,12 +4,19 @@
 
 // Forward declare vulkan stuff
 #define PK_VULKAN_HANDLE(object) typedef struct object##_T* object
+#define PK_VULKAN_FUN(ret, name, ...) extern "C" ret __stdcall name(__VA_ARGS__)
 
 // == Vulkan Memory Allocator ==============================================
 enum VmaMemoryUsage;
 
-PK_VULKAN_HANDLE(VmaAllocation);
 PK_VULKAN_HANDLE(VmaAllocator);
+PK_VULKAN_HANDLE(VmaAllocation);
+PK_VULKAN_HANDLE(VkImage);
+PK_VULKAN_HANDLE(VkBuffer);
+
+extern "C" void vmaDestroyAllocator(VmaAllocator allocator);
+extern "C" void vmaDestroyImage(VmaAllocator allocator, VkImage image, VmaAllocation allocation);
+extern "C" void vmaDestroyBuffer(VmaAllocator allocator, VkBuffer image, VmaAllocation allocation);
 
 // == Vulkan.h =============================================================
 typedef u32 VkBufferUsageFlags;
@@ -19,6 +26,7 @@ typedef u32 VkDebugUtilsMessageTypeFlagsEXT;
 struct VkVertexInputBindingDescription;
 struct VkVertexInputAttributeDescription;
 struct VkPhysicalDeviceProperties;
+struct VkAllocationCallbacks;
 
 enum VkFormat;
 enum VkDebugUtilsMessageSeverityFlagBitsEXT;
@@ -47,6 +55,27 @@ PK_VULKAN_HANDLE(VkRenderPass);
 PK_VULKAN_HANDLE(VkFramebuffer);
 PK_VULKAN_HANDLE(VkDescriptorSetLayout);
 PK_VULKAN_HANDLE(VkDescriptorPool);
+PK_VULKAN_HANDLE(VkSampler);
+
+// VK_NO_PROTOTYPES
+
+PK_VULKAN_FUN(void, vkDestroyDevice, VkDevice, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyInstance, VkInstance, const VkAllocationCallbacks*);
+
+PK_VULKAN_FUN(void, vkDestroySurfaceKHR, VkInstance, VkSurfaceKHR, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyImageView, VkDevice, VkImageView, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroySwapchainKHR, VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyCommandPool, VkDevice, VkCommandPool, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyRenderPass, VkDevice, VkRenderPass, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyFramebuffer, VkDevice, VkFramebuffer, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyFence, VkDevice, VkFence, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroySemaphore, VkDevice, VkSemaphore, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyPipelineLayout, VkDevice, VkPipelineLayout, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyShaderModule, VkDevice, VkShaderModule, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyDescriptorSetLayout, VkDevice, VkDescriptorSetLayout, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyDescriptorPool, VkDevice, VkDescriptorPool, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroySampler, VkDevice, VkSampler, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyPipeline, VkDevice, VkPipeline, const VkAllocationCallbacks*);
 
 constexpr uint vk_max_physical_device_name_size = 256u;
 constexpr uint vk_uuid_size = 16u;

@@ -21,6 +21,15 @@ struct Slice {
 	usize size() const { return len; }
 	usize byteSize() const { return len * sizeof(T); }
 
+	bool contains(const T &object) const {
+		for (usize i = 0; i < len; ++i) {
+			if (buf[i] == object) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	Slice sub(usize start, usize end = SIZE_MAX) const {
 		if (empty() || start >= len) return Slice();
 		if (end >= len) end = len;

@@ -4,33 +4,38 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "core/input.h"
+#include "std/logging.h"
 
 void Camera::update() {
     const float dt = 1.f / 60.f;
 
     float off_right = isKeyDown(Key::D) - (float)isKeyDown(Key::A);
     float off_fwd   = isKeyDown(Key::W) - (float)isKeyDown(Key::S);
+    float off_up    = isKeyDown(Key::E) - (float)isKeyDown(Key::Q);
 
-    pos += right * off_right * dt;
-    pos += fwd * off_fwd * dt;
+    pos += right * off_right * dt * mov_speed;
+    pos += fwd * off_fwd * dt * mov_speed;
+    pos += world_up * off_up * dt * mov_speed;
 
-    vec2 mouse_rel = getMouseRel();
+    if (isMouseDown(Mouse::Right)) {
+        vec2 mouse_rel = getMouseRel();
 
-    yaw += mouse_rel.x * mov_speed * dt;
-    pitch += mouse_rel.y * mov_speed * dt;
+        yaw += mouse_rel.x * rot_speed * dt * -1;
+        pitch += mouse_rel.y * rot_speed * dt;
+    }
 
     float y = math::toRad(yaw);
     float p = math::toRad(pitch);
 
-    vec3 front = {
+    fwd = {
         cosf(y) * cosf(p),
         sinf(p),
         sinf(y) * cosf(p),
     };
-    front.norm();
+    fwd.norm();
 
-    right = norm(cross(front, world_up));
-    up    = norm(cross(right, front));
+    right = norm(cross(fwd, world_up));
+    up    = norm(cross(right, fwd));
 }
 
 glm::mat4 Camera::getView() {

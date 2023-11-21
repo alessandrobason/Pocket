@@ -128,6 +128,7 @@ static void convertImage(const fs::path &fname) {
     AssetTexture info = {
         .byte_size = (usize)(x * y * 4),
         .format = AssetTexture::Rgba8,
+        .compression = Compression::Lz4,
         .pixel_size = { (u64)x, (u64)y, 1 },
         .original_file = fname.filename().string().c_str(),
     };
@@ -260,10 +261,6 @@ static void convertMesh(const fs::path &fname) {
     Mesh mesh = {};
 
     processNode(scene->mRootNode, scene, mesh);
-
-    for (u32 i : mesh.ind32) {
-        info("%u", i);
-    }
 
     Slice<byte> indices;
     u8 index_size = 0;

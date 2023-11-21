@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include "std/arr.h"
+#include "std/slice.h"
 #include "mesh.h"
 
 struct PipelineBuilder {
@@ -16,6 +17,7 @@ struct PipelineBuilder {
 	VkPipelineMultisampleStateCreateInfo m_multisampling;
 	VkPipelineLayout m_layout;
 	VkPipelineDepthStencilStateCreateInfo m_depth_stencil;
+	VkPipelineDynamicStateCreateInfo m_dyn_create_info;
 
 	PipelineBuilder &pushShader(VkShaderStageFlagBits stage, VkShaderModule shader, const char *entry = "main");
 	PipelineBuilder &setVertexInput(const VertexInDesc &vtx_desc);
@@ -28,6 +30,7 @@ struct PipelineBuilder {
 	PipelineBuilder &setMultisampling(VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
 	PipelineBuilder &setLayout(VkPipelineLayout layout);
 	PipelineBuilder &setDepthStencil(VkCompareOp operation = VK_COMPARE_OP_LESS_OR_EQUAL);
-
-	VkPipeline build(VkDevice device, VkRenderPass pass);
+	PipelineBuilder &setDynamicState(Slice<VkDynamicState> dynamic_states);
+	
+	vkptr<VkPipeline> build(VkDevice device, VkRenderPass pass);
 };

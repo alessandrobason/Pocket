@@ -160,14 +160,14 @@ Buffer mesh__upload(Engine &engine, VkBufferUsageFlagBits vert_or_ind, const voi
 		&buf_info,
 		&alloc_info,
 		&staging_buffer.buffer,
-		&staging_buffer.allocation,
+		&staging_buffer.alloc,
 		nullptr
 	));
 
 	void *gpu_data;
-	vmaMapMemory(engine.m_allocator, staging_buffer.allocation, &gpu_data);
+	vmaMapMemory(engine.m_allocator, staging_buffer.alloc, &gpu_data);
 	memcpy(gpu_data, data, size);
-	vmaUnmapMemory(engine.m_allocator, staging_buffer.allocation);
+	vmaUnmapMemory(engine.m_allocator, staging_buffer.alloc);
 
 	buf_info.usage = vert_or_ind | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -177,10 +177,9 @@ Buffer mesh__upload(Engine &engine, VkBufferUsageFlagBits vert_or_ind, const voi
 		&buf_info,
 		&alloc_info,
 		&outbuf.buffer,
-		&outbuf.allocation,
+		&outbuf.alloc,
 		nullptr
 	));
-	engine.m_delete_queue.push(vmaDestroyBuffer, engine.m_allocator, outbuf.buffer, outbuf.allocation);
 
 	engine.immediateSubmit(
 		[&size, &staging_buffer, &outbuf]
@@ -192,7 +191,7 @@ Buffer mesh__upload(Engine &engine, VkBufferUsageFlagBits vert_or_ind, const voi
 		}
 	);
 
-	vmaDestroyBuffer(engine.m_allocator, staging_buffer.buffer, staging_buffer.allocation);
+	// vmaDestroyBuffer(engine.m_allocator, staging_buffer.buffer, staging_buffer.allocation);
 
 	return outbuf;
 }

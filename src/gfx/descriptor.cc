@@ -30,9 +30,9 @@ static VkDescriptorPool desc__create_pool(
 
 void DescriptorAllocator::resetPools() {
     // reset all used pools
-    for (VkDescriptorPool &p : used_pools) {
+    for (vkptr<VkDescriptorPool> &p : used_pools) {
         vkResetDescriptorPool(device, p, 0);
-        free_pools.push(p);
+        free_pools.push(mem::move(p));
     }
 
     used_pools.clear();
@@ -79,6 +79,7 @@ void DescriptorAllocator::init(VkDevice new_device) {
     device = new_device;
 }
 
+#if 0
 void DescriptorAllocator::cleanup() {
     for (VkDescriptorPool &p : free_pools) {
         vkDestroyDescriptorPool(device, p, nullptr);
@@ -88,6 +89,7 @@ void DescriptorAllocator::cleanup() {
         vkDestroyDescriptorPool(device, p, nullptr);
     }
 }
+#endif
 
 VkDescriptorPool DescriptorAllocator::grabPool() {
     if (!free_pools.empty()) {
@@ -108,11 +110,13 @@ void DescriptorLayoutCache::init(VkDevice new_device) {
     device = new_device;
 }
 
+#if 0
 void DescriptorLayoutCache::cleanup() {
     for (VkDescriptorSetLayout layout : layout_cache) {
         vkDestroyDescriptorSetLayout(device, layout, nullptr);
     }
 }
+#endif
 
 VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptorSetLayoutCreateInfo &info) {
     DescriptorLayoutInfo layout_info;
@@ -140,8 +144,8 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
         );
     }
 
-    if (VkDescriptorSetLayout *it = layout_cache.get(layout_info)) {
-        return *it;
+    if (vkptr<VkDescriptorSetLayout> *it = layout_cache.get(layout_info)) {
+        return it->value;
     }
     else {
         VkDescriptorSetLayout layout;

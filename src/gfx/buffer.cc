@@ -8,7 +8,7 @@
 #include "formats/assets.h"
 #include "engine.h"
 
-static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &engine, Buffer &staging_buf) {
+static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &engine, Buffer &&staging_buf) {
     VkExtent3D image_extent = {
         .width = width,
         .height = height,
@@ -32,7 +32,7 @@ static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &eng
         .usage = VMA_MEMORY_USAGE_GPU_ONLY
     };
 
-    vmaCreateImage(engine.m_allocator, &img_info, &alloc_info, &new_image.image, &new_image.allocation, nullptr);
+    vmaCreateImage(engine.m_allocator, &img_info, &alloc_info, &new_image.buffer, &new_image.alloc, nullptr);
 
     engine.immediateSubmit(
         [&new_image, &staging_buf, &image_extent]
@@ -51,7 +51,7 @@ static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &eng
                 .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .image = new_image.image,
+                .image = new_image.buffer,
                 .subresourceRange = range,
             };
 
@@ -79,7 +79,7 @@ static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &eng
             vkCmdCopyBufferToImage(
                 cmd,
                 staging_buf.buffer,
-                new_image.image,
+                new_image.buffer,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1,
                 &copy_region
@@ -105,8 +105,8 @@ static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &eng
         }
     );
 
-    engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, new_image.image, new_image.allocation);
-    vmaDestroyBuffer(engine.m_allocator, staging_buf.buffer, staging_buf.allocation);
+    // engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, new_image.image, new_image.allocation);
+    staging_buf.destroy();
 
     return new_image;
 }
@@ -134,13 +134,13 @@ bool Texture::load(Engine &engine, const char *filename) {
     Buffer staging_buf = engine.makeBuffer(info.byte_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
     void *data;
-    vmaMapMemory(engine.m_allocator, staging_buf.allocation, &data);
+    vmaMapMemory(engine.m_allocator, staging_buf.alloc, &data);
 
     info.unpack(file.blob, (byte *)data);
 
-    vmaUnmapMemory(engine.m_allocator, staging_buf.allocation);
+    vmaUnmapMemory(engine.m_allocator, staging_buf.alloc);
 
-    image = texture__upload(info.pixel_size[0], info.pixel_size[1], image_format, engine, staging_buf);
+    image = texture__upload(info.pixel_size[0], info.pixel_size[1], image_format, engine, mem::move(staging_buf));
 
     return true;
 }
