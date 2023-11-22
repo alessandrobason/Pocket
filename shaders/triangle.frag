@@ -19,14 +19,13 @@ layout (set=0, binding=1) uniform SceneData {
 layout (set=2, binding=0) uniform sampler2D tex_sampler;
 
 void main() {
-#if 0
-    const vec3 light_pos = vec3(cos(time) * 10, 20, sin(time) * 10);
+    const vec3 light_pos = vec3(10, 20, 10);
     const vec3 light_dir = normalize(light_pos - frag_pos);
     const vec3 diffuse = vec3(max(dot(in_normal, light_dir), 0));
-
-    out_colour = vec4(diffuse * in_colour, 1);
-#endif
     const vec4 tex_col = texture(tex_sampler, in_uv);
-    out_colour = tex_col;
+    out_colour = vec4(diffuse * in_colour, 1);
+#if 0
+    out_colour = vec4(in_colour, 1);
     //out_colour = vec4(tex_col * in_colour, 1);
+#endif
 }

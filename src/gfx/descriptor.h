@@ -29,7 +29,6 @@ struct DescriptorAllocator {
     bool allocate(VkDescriptorSet &set, VkDescriptorSetLayout layout);
 
     void init(VkDevice new_device);
-    //void cleanup();
 
     VkDevice device;
 
@@ -44,7 +43,6 @@ private:
 
 struct DescriptorLayoutCache {
     void init(VkDevice new_device);
-    //void cleanup();
 
     VkDescriptorSetLayout createDescLayout(const VkDescriptorSetLayoutCreateInfo &info);
 

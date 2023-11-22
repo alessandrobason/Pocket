@@ -5,6 +5,7 @@
 #include <string.h> // memset
 
 #include "vmem.h"
+#include "mem.h"
 #include "logging.h"
 
 static constexpr usize arena__calc_padding(usize amount, usize align) {
@@ -23,11 +24,11 @@ static void *arena__alloc_virtual(Arena &self, usize size, usize align, usize co
 static void *arena__alloc_simple(Arena &self, usize size, usize align, usize count, Arena::Flags flags);
 
 Arena Arena::make(usize initial_allocation, Type type) {
-    switch (type) {
+    switch (type & __TypeMask) {
         case Virtual: return arena__make_virtual(initial_allocation);
         case Malloc:  return arena__make_malloc(initial_allocation);
         case Static:  err("Can't initialise static arena using Arena::make, call Arena::makeStatic with your buffer instead"); break;
-        default:      err("Invalid arena type provided: %u", type); break;
+        default:      err("Invalid arena type provided: %u", type & __TypeMask); break;
     }
 
     return {};
@@ -37,14 +38,38 @@ Arena Arena::makeStatic(byte *data, usize len) {
     return arena__make_static(data, len);
 }
 
+Arena::Arena(const Arena &arena) {
+    *this = arena;
+}
+
+Arena::Arena(Arena &&arena) {
+    *this = mem::move(arena);
+}
+
+Arena::~Arena() {
+    cleanup();
+}
+
+void Arena::cleanup() {
+    if (type & __NotOwned) {
+        return;
+    }
+
+    switch (type & __TypeMask) {
+        case Virtual: return arena__free_virtual(*this);
+        case Malloc:  return arena__free_malloc(*this);
+        default:      err("Invalid arena type provided: %u", type & __TypeMask); break;
+    }
+}
+
 void *Arena::alloc(usize size, usize count, usize align, Flags flags) {
-    switch (type) {
+    switch (type & __TypeMask) {
         case Virtual: return arena__alloc_virtual(*this, size, align, count, flags);
         case Malloc: // fallthrough
         case Static:  return arena__alloc_simple(*this, size, align, count, flags);
     }
 
-    err("(POSSIBLE CORRUPTION) -> unknown arena type: %u", type);
+    err("(POSSIBLE CORRUPTION) -> unknown arena type: %u", type & __TypeMask);
     return nullptr;
 }
 
@@ -65,6 +90,24 @@ void Arena::pop(usize amount) {
     rewind(tell() - amount);
 }
 
+Arena &Arena::operator=(const Arena &other) {
+    if (this != &other) {
+        memcpy(this, &other, sizeof(other));
+        type = (Type)(type | __NotOwned);
+    }
+    return *this;
+}
+
+Arena &Arena::operator=(Arena &&other) {
+    if (this != &other) {
+        mem::swap(start, other.start);
+        mem::swap(current, other.current);
+        mem::swap(end, other.end);
+        mem::swap(type, other.type);
+    }
+    return *this;
+}
+
 // == VIRTUAL ARENA ====================================================================================================
 
 static Arena arena__make_virtual(usize initial_allocation) {
@@ -75,12 +118,12 @@ static Arena arena__make_virtual(usize initial_allocation) {
         ptr = nullptr;
     }
 
-    return {
-        .start = ptr,
-        .current = ptr,
-        .end = ptr ? ptr + alloc_size : nullptr,
-        .type = Arena::Virtual
-    };
+    Arena out;
+    out.start = ptr;
+    out.current = ptr;
+    out.end = ptr ? ptr + alloc_size : nullptr;
+    out.type = Arena::Virtual;
+    return out;
 }
 
 static void arena__free_virtual(Arena &self) {
@@ -117,7 +160,6 @@ static void *arena__alloc_virtual(Arena &self, usize size, usize align, usize co
     return flags & Arena::NoZero ? ptr : memset(ptr, 0, total);
 }
 
-
 // == MALLOC ARENA =====================================================================================================
 
 static Arena arena__make_malloc(usize initial_allocation) {
@@ -125,12 +167,12 @@ static Arena arena__make_malloc(usize initial_allocation) {
     if (!ptr) {
         fatal("Could not malloc %zu bytes", initial_allocation);
     }
-    return {
-        .start = ptr,
-        .current = ptr,
-        .end = ptr + initial_allocation,
-        .type = Arena::Malloc,
-    };
+    Arena out;
+    out.start = ptr;
+    out.current = ptr;
+    out.end = ptr + initial_allocation;
+    out.type = Arena::Malloc;
+    return out;
 }
 
 static void arena__free_malloc(Arena &self) {
@@ -140,12 +182,12 @@ static void arena__free_malloc(Arena &self) {
 // == STATIC ARENA =====================================================================================================
 
 static Arena arena__make_static(byte *data, usize len) {
-    return {
-        .start = data,
-        .current = data,
-        .end = data + len,
-        .type = Arena::Static,
-    };
+    Arena out;
+    out.start = data;
+    out.current = data;
+    out.end = data + len;
+    out.type = (Arena::Type)(Arena::Static | Arena::__NotOwned);
+    return out;
 }
 
 static void *arena__alloc_simple(Arena &self, usize size, usize align, usize count, Arena::Flags flags) {

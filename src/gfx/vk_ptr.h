@@ -30,7 +30,7 @@ extern VmaAllocator global_alloc;
                                                             \
         operator T() { return value; }                      \
         operator bool() { return value != nullptr; }        \
-        T get() { return value; }                           \
+        T &get() { return value; }                          \
         T *getRef() { return &value; }                      \
                                                             \
         T value = nullptr;                                  \
@@ -61,7 +61,8 @@ extern VmaAllocator global_alloc;
                                                                 \
         operator T() { return buffer; }                         \
         operator bool() { return buffer != nullptr; }           \
-        T *operator&() { return &buffer; }                      \
+        T &get() { return buffer; }                             \
+        T *getRef() { return &buffer; }                         \
                                                                 \
         T buffer = nullptr;                                     \
         VmaAllocation alloc = nullptr;                          \

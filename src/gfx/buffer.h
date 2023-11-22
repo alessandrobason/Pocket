@@ -9,16 +9,6 @@ struct Engine;
 using Buffer = vkptr<VkBuffer>;
 using Image = vkptr<VkImage>;
 
-// struct Buffer {
-// 	VkBuffer buffer;
-// 	VmaAllocation allocation;
-// };
-
-// struct Image {
-// 	VkImage image;
-// 	VmaAllocation allocation;
-// };
-
 struct Texture {
 	Image image;
 	vkptr<VkImageView> view;

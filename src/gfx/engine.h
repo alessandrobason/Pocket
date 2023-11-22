@@ -17,6 +17,7 @@
 #include "buffer.h"
 #include "mesh.h"
 #include "camera.h"
+#include "descriptor.h"
 
 // constants
 constexpr uint kframe_overlap = 2;
@@ -125,6 +126,9 @@ struct Engine {
 	vkptr<VmaAllocator> m_allocator;
 	vkptr<VkDescriptorPool> m_imgui_pool;
 
+    DescriptorLayoutCache m_desc_cache;
+    DescriptorAllocator m_desc_alloc;
+
 	VkQueue m_gfxqueue = nullptr;
 	u32 m_gfxqueue_family = 0;
 
@@ -137,9 +141,9 @@ struct Engine {
 	vkptr<VkImageView> m_depth_view;
 	VkFormat m_depth_format;
 
-	vkptr<VkDescriptorSetLayout> m_global_set_layout;
-	vkptr<VkDescriptorSetLayout> m_object_set_layout;
-	vkptr<VkDescriptorSetLayout> m_single_texture_set_layout;
+	VkDescriptorSetLayout m_global_set_layout;
+	VkDescriptorSetLayout m_object_set_layout;
+	VkDescriptorSetLayout m_single_texture_set_layout;
 	vkptr<VkDescriptorPool> m_descriptor_pool;
 
     arr<vkptr<VkPipeline>> m_pipeline_cache;

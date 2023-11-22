@@ -8,9 +8,12 @@ constexpr usize gb(usize b) { return mb(b) * 1024; }
 
 struct Arena {
     enum Type : u8 {
-        Virtual,  // using virtual memory (allocates only when needed)
-        Malloc,   // using malloc (preallocates memory on heap)
-        Static,   // using static buffer (you will need to provide it!)
+        Virtual  = 1 << 0, // using virtual memory (allocates only when needed)
+        Malloc   = 1 << 1, // using malloc (preallocates memory on heap)
+        Static   = 1 << 2, // using static buffer (you will need to provide it!)
+        
+        __TypeMask = 0x7F,
+        __NotOwned = 1 << 7,
     };
 
     enum Flags : u8 {
@@ -26,6 +29,13 @@ struct Arena {
         return makeStatic(data, size);
     }
 
+    Arena() = default;
+    Arena(const Arena &arena);
+    Arena(Arena &&arena);
+    ~Arena();
+
+    void cleanup();
+
     void *alloc(usize size, usize count, usize align = 1, Flags flags = Flags::None);
     template<typename T>
     T *alloc(usize count = 1, Flags flags = Flags::None, usize size = sizeof(T), usize align = alignof(T)) {
@@ -37,6 +47,9 @@ struct Arena {
     void pop(usize amount);
     template<typename T>
     void pop(usize count = 1) { pop(sizeof(T) * count); }
+
+    Arena &operator=(const Arena &other);
+    Arena &operator=(Arena &&other);
 
     byte *start = nullptr;
     byte *current = nullptr;

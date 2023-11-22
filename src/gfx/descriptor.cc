@@ -79,18 +79,6 @@ void DescriptorAllocator::init(VkDevice new_device) {
     device = new_device;
 }
 
-#if 0
-void DescriptorAllocator::cleanup() {
-    for (VkDescriptorPool &p : free_pools) {
-        vkDestroyDescriptorPool(device, p, nullptr);
-    }
-
-    for (VkDescriptorPool &p : used_pools) {
-        vkDestroyDescriptorPool(device, p, nullptr);
-    }
-}
-#endif
-
 VkDescriptorPool DescriptorAllocator::grabPool() {
     if (!free_pools.empty()) {
         VkDescriptorPool pool = free_pools.back();
@@ -104,19 +92,12 @@ VkDescriptorPool DescriptorAllocator::grabPool() {
 
 // == DESCRIPTOR LAYOUT CACHE ================================================================================================================================
 
-#include <algorithm> // std::sort
+// #include <algorithm> // std::sort
+#include "utils/sort.h"
 
 void DescriptorLayoutCache::init(VkDevice new_device) {
     device = new_device;
 }
-
-#if 0
-void DescriptorLayoutCache::cleanup() {
-    for (VkDescriptorSetLayout layout : layout_cache) {
-        vkDestroyDescriptorSetLayout(device, layout, nullptr);
-    }
-}
-#endif
 
 VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptorSetLayoutCreateInfo &info) {
     DescriptorLayoutInfo layout_info;
@@ -136,12 +117,13 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
         }
     }
 
-    if (!is_sorted) {
-        std::sort(layout_info.bindings.begin(), layout_info.bindings.end(), 
-            [](const VkDescriptorSetLayoutBinding &a, const VkDescriptorSetLayoutBinding &b) { 
-                return a.binding < b.binding; 
-            }
-        );
+    if (!is_sorted && !layout_info.bindings.empty()) {
+        radixSort(&layout_info.bindings[0].binding, (u32)layout_info.bindings.len, sizeof(VkDescriptorSetLayoutBinding));
+        // std::sort(layout_info.bindings.begin(), layout_info.bindings.end(), 
+        //     [](const VkDescriptorSetLayoutBinding &a, const VkDescriptorSetLayoutBinding &b) { 
+        //         return a.binding < b.binding; 
+        //     }
+        // );
     }
 
     if (vkptr<VkDescriptorSetLayout> *it = layout_cache.get(layout_info)) {
@@ -184,7 +166,6 @@ DescriptorBuilder::DescriptorBuilder(DescriptorLayoutCache &c, DescriptorAllocat
     : cache(c), allocator(a)
 {
 }
-
 
 DescriptorBuilder DescriptorBuilder::begin(DescriptorLayoutCache &layout_cache, DescriptorAllocator &layout_allocator) {
     return DescriptorBuilder{ layout_cache, layout_allocator };

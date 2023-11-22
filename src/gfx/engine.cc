@@ -290,6 +290,9 @@ void Engine::initGfx() {
 	global_device = m_device;
 	global_instance = m_instance;
 	global_alloc = m_allocator;
+
+    m_desc_cache.init(m_device);
+    m_desc_alloc.init(m_device);
 }
 
 void Engine::initSwapchain() {
@@ -602,57 +605,6 @@ void Engine::initPipeline() {
 }
 
 void Engine::initDescriptors() {
-	VkDescriptorSetLayoutBinding cam_bindings = {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-	};
-
-	VkDescriptorSetLayoutBinding scene_bindings = {
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-	};
-
-	VkDescriptorSetLayoutBinding bindings[] = {
-		cam_bindings, 
-		scene_bindings
-	};
-
-	VkDescriptorSetLayoutCreateInfo set_info = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = pk_arrlen(bindings),
-		.pBindings = bindings,
-	};
-
-	vkCreateDescriptorSetLayout(m_device, &set_info, nullptr, m_global_set_layout.getRef());
-
-	VkDescriptorSetLayoutBinding object_bindings = {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-	};
-
-	set_info.bindingCount = 1;
-	set_info.pBindings = &object_bindings;
-
-	vkCreateDescriptorSetLayout(m_device, &set_info, nullptr, m_object_set_layout.getRef());
-
-	VkDescriptorSetLayoutBinding texture_bindings = {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-	};
-
-	set_info.bindingCount = 1;
-	set_info.pBindings = &texture_bindings;
-
-	vkCreateDescriptorSetLayout(m_device, &set_info, nullptr, m_single_texture_set_layout.getRef());
-
 	// create a descriptor pool that will hold 10 uniform buffers
 	VkDescriptorPoolSize sizes[] = {
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
@@ -673,6 +625,21 @@ void Engine::initDescriptors() {
 	uint64_t scene_buf_size = kframe_overlap * padUniformBufferSize(sizeof(SceneData));
 	m_scene_params_buf = makeBuffer(scene_buf_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
+	VkDescriptorSetLayoutBinding texture_bindings = {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+	};
+
+	VkDescriptorSetLayoutCreateInfo set_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = 1,
+		.pBindings = &texture_bindings,
+	};
+
+	m_single_texture_set_layout = m_desc_cache.createDescLayout(set_info);
+
 	for (size_t i = 0; i < pk_arrlen(m_frames); ++i) {
 		FrameData &frame = m_frames[i];
 
@@ -685,81 +652,24 @@ void Engine::initDescriptors() {
 			VMA_MEMORY_USAGE_CPU_TO_GPU
 		);
 
-		VkDescriptorSetAllocateInfo alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-			.descriptorPool = m_descriptor_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = m_global_set_layout.getRef(),
-		};
+		frame.global_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+			.bindBuffer(0, { frame.camera_buf, 0, sizeof(GPUCameraData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+			.bindBuffer(1, { m_scene_params_buf, 0, sizeof(SceneData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+			.build(m_global_set_layout);
 
-		PK_VKCHECK(vkAllocateDescriptorSets(m_device, &alloc_info, &frame.global_descriptor));
-
-		alloc_info.pSetLayouts = m_object_set_layout.getRef();
-
-		PK_VKCHECK(vkAllocateDescriptorSets(m_device, &alloc_info, &frame.object_descriptor));
-
-		VkDescriptorBufferInfo cam_info = {
-			.buffer = frame.camera_buf.buffer,
-			.offset = 0,
-			.range = sizeof(GPUCameraData),
-		};
-
-		VkDescriptorBufferInfo scene_info = {
-			.buffer = m_scene_params_buf.buffer,
-			.offset = 0,
-			.range = sizeof(SceneData),
-		};
-
-		VkDescriptorBufferInfo object_info = {
-			.buffer = frame.object_buf.buffer,
-			.offset = 0,
-			.range = sizeof(ObjectData) * max_objects,
-		};
-
-		VkWriteDescriptorSet cam_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = frame.global_descriptor,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.pBufferInfo = &cam_info,
-		};
-
-		VkWriteDescriptorSet scene_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = frame.global_descriptor,
-			.dstBinding = 1,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.pBufferInfo = &scene_info,
-		};
-
-		VkWriteDescriptorSet object_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = frame.object_descriptor,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &object_info,
-		};
-
-		VkWriteDescriptorSet set_writes[] = {
-			cam_write, 
-			scene_write,
-			object_write,
-		};
-
-		vkUpdateDescriptorSets(m_device, pk_arrlen(set_writes), set_writes, 0, nullptr);
+		frame.object_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+			.bindBuffer(0, { frame.object_buf, 0, sizeof(ObjectData) * max_objects }, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+			.build(m_object_set_layout);
 	}
 }
 
 void Engine::initScene() {
-    // loadMesh("../../assets/imported/monkey_smooth.mesh", "monkey");
-    loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
+    loadMesh("../../assets/imported/monkey_smooth.mesh", "monkey");
+    // loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
     // loadMesh("../../assets/imported/triangle.mesh", "triangle");
 
     RenderObject map = {
-        .mesh = getMesh("lost_empire"),
+        .mesh = getMesh("monkey"),
         .material = getMaterial("texturedmesh"),
 		.matrix = glm::mat4(1),
     };
@@ -779,31 +689,9 @@ void Engine::initScene() {
 
 	Material* textured_mat = getMaterial("texturedmesh");
 
-	VkDescriptorSetAllocateInfo alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = m_descriptor_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = m_single_texture_set_layout.getRef(),
-	};
-
-	vkAllocateDescriptorSets(m_device, &alloc_info, &textured_mat->texture_set);
-
-	VkDescriptorImageInfo image_info = {
-		.sampler = blocky_sampler,
-		.imageView = m_textures.get("empire_diffuse")->view,
-		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
-
-	VkWriteDescriptorSet texture = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = textured_mat->texture_set,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.pImageInfo = &image_info,
-	};
-
-	vkUpdateDescriptorSets(m_device, 1, &texture, 0, nullptr);
+	textured_mat->texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+		.bindImage(0, { blocky_sampler, m_textures.get("empire_diffuse")->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+		.build();
 
 	m_sampler_cache.push(mem::move(blocky_sampler));
 }
@@ -856,9 +744,6 @@ void Engine::initImGui() {
 }
 
 void Engine::resizeWindow(int new_width, int new_height) {
-	// resize imgui
-	//ImGui_ImplVulkanH_CreateOrResizeWindow(m_instance, m_chosen_gpu, m_device, nullptr, m_gfxqueue_family, nullptr, new_width, new_height, 2);
-
 	vkDeviceWaitIdle(m_device);
 
 	initSwapchain();
@@ -886,62 +771,6 @@ void Engine::loadImages() {
 
 	m_textures.push("empire_diffuse", mem::move(lost_empire));
 }
-
-#if 0
-void Engine::uploadMesh(Mesh &mesh) {
-	const size_t buffer_size = mesh.verts.byteSize();
-
-	VkBufferCreateInfo buf_info = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = (u32)buffer_size,
-		.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-	};
-
-	VmaAllocationCreateInfo alloc_info = {
-		.usage = VMA_MEMORY_USAGE_CPU_ONLY,
-	};
-
-	Buffer staging_buffer;
-
-	PK_VKCHECK(vmaCreateBuffer(
-		m_allocator,
-		&buf_info,
-		&alloc_info,
-		&staging_buffer.buffer,
-		&staging_buffer.allocation,
-		nullptr
-	));
-
-	void *gpu_data;
-	vmaMapMemory(m_allocator, staging_buffer.allocation, &gpu_data);
-	memcpy(gpu_data, mesh.verts.data(), buffer_size);
-	vmaUnmapMemory(m_allocator, staging_buffer.allocation);
-
-	buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-	PK_VKCHECK(vmaCreateBuffer(
-		m_allocator,
-		&buf_info,
-		&alloc_info,
-		&mesh.buffer.buffer,
-		&mesh.buffer.allocation,
-		nullptr
-	));
-
-	immediateSubmit(
-		[&buffer_size, &staging_buffer, &mesh]
-		(VkCommandBuffer cmd) {
-			VkBufferCopy copy = {
-				.size = buffer_size,
-			};
-			vkCmdCopyBuffer(cmd, staging_buffer.buffer, mesh.buffer.buffer, 1, &copy);
-		}
-	);
-
-	vmaDestroyBuffer(m_allocator, staging_buffer.buffer, staging_buffer.allocation);
-}
-#endif
 
 void Engine::draw() {
 	ImGui::Render();

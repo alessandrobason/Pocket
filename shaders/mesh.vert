@@ -43,7 +43,7 @@ void main() {
     // );
 
     // out_colour = vec3(1);
-    out_colour = norm;
+    out_colour = col;
     out_normal = norm;
     out_uv = uv;
     frag_pos = vec3(obj_buf.objects[gl_BaseInstance].model * vec4(pos, 1));
