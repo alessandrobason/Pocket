@@ -773,6 +773,8 @@ void Engine::loadImages() {
 }
 
 void Engine::draw() {
+	// TODO: handle minimize
+
 	ImGui::Render();
 
 	FrameData &frame = getCurrentFrame();

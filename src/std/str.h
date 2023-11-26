@@ -1,8 +1,10 @@
 #pragma once
 
 #include <stdarg.h>
+#include <assert.h>
 
 #include "common.h"
+#include "logging.h"
 
 struct Arena;
 struct StrView;
@@ -48,6 +50,9 @@ struct Str {
     const char *cstr() const;
     usize size() const;
     bool isOwned() const;
+
+    u32 hash() const;
+    u64 hash64() const;
 
     char *begin();
     char *end();
@@ -110,9 +115,18 @@ struct StrView {
     usize findLastNot(char c, isize from_end = -1);
     usize findLastNotOf(StrView view, isize from_end = -1);
 
+    u32 hash() const;
+    u64 hash64() const;
+
     const char *data();
     const char *c_str() const;
     usize size() const;
+    
+    char *begin();
+    char *end();
+    char &back();
+    char &front();
+    char &operator[](usize index);
 
     const char *begin() const;
     const char *end() const;
@@ -125,4 +139,55 @@ struct StrView {
 
     const char *buf = nullptr;
     usize len = 0;
+};
+
+template<usize N>
+struct StaticStr {
+    StaticStr() = default;
+    StaticStr(StrView str) {
+        init(str.buf, str.len);
+    }
+
+    void init(const char *str, usize new_len) {
+        if (new_len > (N - 1)) {
+            err("initialising StaticStr with length %zu, but maximum is %zu, truncating", new_len, N);
+            new_len = N - 1;
+        }
+        memcpy(buf, str, new_len);
+        buf[new_len] = 0;
+        len = new_len;
+    }
+
+    Str dup(Arena &arena)                const { return StrView(buf, len).dup(); }
+    StrView sub(usize from = 0, usize to = -1) { return StrView(buf, len).sub(from, to); }
+    bool empty()                         const { return strlen(buf) == 0; }
+
+    u32 hash()   const { return StrView(buf, len).hash(); }
+    u64 hash64() const { return StrView(buf, len).hash64(); }
+
+    const char *data()        { return buf; }
+    const char *c_str() const { return buf; }
+    usize size()        const { return len; }
+
+    char *begin() { return buf; }
+    char *end()   { return buf + len; }
+    char &back()  { return len ? buf[len - 1] : buf[0]; }
+    char &front() { return buf[0]; }
+    char &operator[](usize index) { pk_assert(index < (len - 1)); return buf[index]; }
+
+    const char *begin() const { return buf; }
+    const char *end()   const { return buf + size(); }
+    const char &back()  const { return len ? buf[len - 1] : buf[0]; }
+    const char &front() const { return buf[0]; }
+    const char &operator[](usize index) const { pk_assert(index < (len - 1)); return buf[index]; }
+
+    bool operator==(StrView v) const { return StrView(buf, len) == v; }
+    bool operator!=(StrView v) const { return StrView(buf, len) != v; }
+
+    operator StrView() const {
+        return StrView(buf, len);
+    }
+
+    char buf[N] = {0};
+    usize len;
 };

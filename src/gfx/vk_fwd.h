@@ -56,6 +56,7 @@ PK_VULKAN_HANDLE(VkFramebuffer);
 PK_VULKAN_HANDLE(VkDescriptorSetLayout);
 PK_VULKAN_HANDLE(VkDescriptorPool);
 PK_VULKAN_HANDLE(VkSampler);
+PK_VULKAN_HANDLE(VkQueryPool);
 
 // VK_NO_PROTOTYPES
 
@@ -76,6 +77,7 @@ PK_VULKAN_FUN(void, vkDestroyDescriptorSetLayout, VkDevice, VkDescriptorSetLayou
 PK_VULKAN_FUN(void, vkDestroyDescriptorPool, VkDevice, VkDescriptorPool, const VkAllocationCallbacks*);
 PK_VULKAN_FUN(void, vkDestroySampler, VkDevice, VkSampler, const VkAllocationCallbacks*);
 PK_VULKAN_FUN(void, vkDestroyPipeline, VkDevice, VkPipeline, const VkAllocationCallbacks*);
+PK_VULKAN_FUN(void, vkDestroyQueryPool, VkDevice, VkQueryPool, const VkAllocationCallbacks*);
 
 constexpr uint vk_max_physical_device_name_size = 256u;
 constexpr uint vk_uuid_size = 16u;

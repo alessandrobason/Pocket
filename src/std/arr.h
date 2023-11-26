@@ -49,10 +49,9 @@ struct arr {
 			pop();
 		}
 
-		if (new_len > len) {
-			for (usize i = len; i < new_len; ++i) {
-				push();
-			}
+		reserve(new_len);
+		while (new_len > len) {
+			push();
 		}
 	}
 

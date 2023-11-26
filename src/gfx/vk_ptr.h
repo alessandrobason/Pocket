@@ -91,6 +91,7 @@ PK_DECLARE_VKPTR_DEV(VkDescriptorSetLayout, vkDestroyDescriptorSetLayout);
 PK_DECLARE_VKPTR_DEV(VkDescriptorPool, vkDestroyDescriptorPool);
 PK_DECLARE_VKPTR_DEV(VkSampler, vkDestroySampler);
 PK_DECLARE_VKPTR_DEV(VkPipeline, vkDestroyPipeline);
+PK_DECLARE_VKPTR_DEV(VkQueryPool, vkDestroyQueryPool);
 
 PK_DECLARE_VKPTR_BASE(VkDevice, vkDestroyDevice, vkDestroyDevice(value, nullptr));
 PK_DECLARE_VKPTR_BASE(VkInstance, vkDestroyInstance, vkDestroyInstance(value, nullptr));

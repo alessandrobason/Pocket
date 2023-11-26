@@ -27,11 +27,14 @@ source_group("std"     FILES ${PK_STD})
 source_group("formats" FILES ${PK_FMT})
 source_group("gfx"     FILES ${PK_GFX})
 source_group("utils"   FILES ${PK_UTILS})
+source_group("core"    FILES ${PK_CORE})
 source_group("src"     FILES ${PK_SRC})
 
 set_property(TARGET pocket PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:pocket>")
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT pocket)
+set_property(TARGET pocket PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 target_include_directories(pocket PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(pocket PRIVATE pocket_std pocket_formats vkbootstrap vma glm tinyobjloader imgui stb_image)
+target_link_libraries(pocket PRIVATE pocket_std pocket_formats vkbootstrap vma glm tinyobjloader imgui stb_image spirv-reflect)
 
 add_dependencies(pocket Shaders)

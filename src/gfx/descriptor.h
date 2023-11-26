@@ -51,7 +51,7 @@ struct DescriptorLayoutCache {
 
         bool operator==(const DescriptorLayoutInfo &other) const;
 
-        usize hash() const;
+        u32 hash() const;
     };
 
 private:

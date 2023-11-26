@@ -8,6 +8,7 @@
 #include "arena.h"
 #include "mem.h"
 #include "stream.h"
+#include "hash.h"
 
 // use left-most bit as bitflag for owning
 static constexpr u64 str_not_owned_flags = 1ull << 63;
@@ -222,6 +223,14 @@ usize Str::size() const {
 
 bool Str::isOwned() const {
     return str__is_owned(len);
+}
+
+u32 Str::hash() const {
+    return hashFnv132(buf, size());
+}
+
+u64 Str::hash64() const {
+    return hashFnv164(buf, size());
 }
 
 char *Str::begin() {
@@ -501,6 +510,14 @@ usize StrView::findLastNotOf(StrView view, isize from_end) {
     }
 
     return SIZE_MAX;
+}
+
+u32 StrView::hash() const {
+    return hashFnv132(buf, len);
+}
+
+u64 StrView::hash64() const {
+    return hashFnv164(buf, len);
 }
 
 const char *StrView::data() {

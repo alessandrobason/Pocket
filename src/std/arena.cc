@@ -127,6 +127,8 @@ static Arena arena__make_virtual(usize initial_allocation) {
 }
 
 static void arena__free_virtual(Arena &self) {
+    if (!self.start) return;
+
     if (!vmem::release(self.start)) {
         err("failed to free virtual memory");
     }

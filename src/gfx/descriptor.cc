@@ -1,5 +1,7 @@
 #include "descriptor.h"
 
+#include "std/hash.h"
+
 // == DESCRIPTOR ALLOCATOR ===================================================================================================================================
 
 static VkDescriptorPool desc__create_pool(
@@ -155,9 +157,8 @@ bool DescriptorLayoutCache::DescriptorLayoutInfo::operator==(const DescriptorLay
     return true;
 }
 
-usize DescriptorLayoutCache::DescriptorLayoutInfo::hash() const {
-    pk_assert(false && "TODO");
-    return 0;
+u32 DescriptorLayoutCache::DescriptorLayoutInfo::hash() const {
+    return hashFnv132(bindings.data(), bindings.byteSize());
 }
 
 // == DESCRIPTOR BUILDER =====================================================================================================================================
