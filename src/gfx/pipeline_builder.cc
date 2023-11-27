@@ -4,6 +4,12 @@
 
 #include "std/logging.h"
 
+#include "shader.h"
+
+PipelineBuilder PipelineBuilder::begin() {
+	return PipelineBuilder();
+}
+
 PipelineBuilder &PipelineBuilder::pushShader(
 	VkShaderStageFlagBits stage, 
 	VkShaderModule shader, 
@@ -14,6 +20,20 @@ PipelineBuilder &PipelineBuilder::pushShader(
 		.module = shader,
 		.pName = entry,
 	});
+	return *this;
+}
+
+PipelineBuilder &PipelineBuilder::pushShaders(ShaderCompiler &compiler) {
+	m_layout = compiler.pipeline_layout;
+
+	for (ShaderCompiler::StageInfo &stage : compiler.stages) {
+		m_shader_stages.push({
+			.stage = stage.stage,
+			.module = stage.module,
+			.pName = "main",
+		});
+	}
+	
 	return *this;
 }
 

@@ -225,14 +225,6 @@ bool Str::isOwned() const {
     return str__is_owned(len);
 }
 
-u32 Str::hash() const {
-    return hashFnv132(buf, size());
-}
-
-u64 Str::hash64() const {
-    return hashFnv164(buf, size());
-}
-
 char *Str::begin() {
     return buf;
 }
@@ -516,10 +508,6 @@ u32 StrView::hash() const {
     return hashFnv132(buf, len);
 }
 
-u64 StrView::hash64() const {
-    return hashFnv164(buf, len);
-}
-
 const char *StrView::data() {
     return buf;
 }
@@ -562,4 +550,12 @@ bool StrView::operator==(StrView v) const {
 
 bool StrView::operator!=(StrView v) const {
     return !(*this == v);
+}
+
+u32 hash_impl(const Str &v) {
+    return hashFnv132(v.data(), v.size());
+}
+
+u32 hash_impl(const StrView &v) {
+    return hashFnv132(v.buf, v.len);
 }

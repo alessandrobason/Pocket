@@ -3,15 +3,23 @@
 #include "common.h"
 #include "arr.h"
 
+u32 hash_impl(u32 v);
+
 // TODO: if < X items, fallback to linear search and array
 // TODO: better api?
 
 template<typename Key, typename Value>
 struct HashMap {
-	static constexpr u8 tombstone[sizeof(Key)] = {0};
-
 	HashMap() {
 		reserve(64);
+	}
+
+	void setTombstone(const Key &new_tomb) {
+		tombstone = new_tomb;
+	}
+
+	void setTombstone(Key &&new_tomb) {
+		tombstone = mem::move(new_tomb);
 	}
 	
 	void reserve(usize n) {
@@ -26,12 +34,14 @@ struct HashMap {
         next_pow2 |= next_pow2 >> 16;
         next_pow2++;
 
-		keys.resize(next_pow2);
+		keys.clear();
+		keys.resize(next_pow2, tombstone);
 		values.resize(next_pow2);
 	}
 
 	Value *push(const Key &key, const Value &value = {}) {
-		Value &val = pushImpl(key, key.hash());
+		//Value &val = pushImpl(key, key.hash());
+		Value &val = pushImpl(key, hash_impl(key));
 		val = value;
 		return &val;
 #if 0
@@ -48,7 +58,8 @@ struct HashMap {
 	}
 
 	Value* push(const Key &key, Value &&value) {
-		Value &val = pushImpl(key, key.hash());
+		//Value &val = pushImpl(key, key.hash());
+		Value &val = pushImpl(key, hash_impl(key));
 		val = mem::move(value);
 		return &val;
 #if 0
@@ -65,12 +76,13 @@ struct HashMap {
 	}
 
 	Value *get(const Key& key) {
-		u32 hash = key.hash() & ((u32)keys.size() - 1);
+		u32 hash = hash_impl(key) & ((u32)keys.size() - 1);
+		//u32 hash = key.hash() & ((u32)keys.size() - 1);
 
         // maximum number of iterations
         for (size_t i = 0; i < keys.size(); ++i) {
             // unique, doesn't exist
-            if (isTombstone(keys[hash])) {
+            if (keys[hash] == tombstone) {
 				return nullptr;
             }
             
@@ -133,10 +145,6 @@ struct HashMap {
 	const HashIter end() const { return HashIter(*this, keys.size()); }
 
 private:
-	bool isTombstone(Key &key) const {
-		return memcmp(&key, tombstone, sizeof(Key)) == 0;
-	}
-
 	Value &pushImpl(const Key &key, u32 hash) {
 		// u32 hash = key.hash() & ((u32)keys.size() - 1);
 		hash &= (u32)keys.size() - 1;
@@ -144,7 +152,7 @@ private:
         // maximum number of iterations
         for (size_t i = 0; i < keys.size(); ++i) {
             // unique
-            if (isTombstone(keys[hash])) {
+            if (keys[hash] == tombstone) {
                 keys[hash] = key;
                 return values[hash];
             }
@@ -169,4 +177,13 @@ private:
 
 	arr<Key> keys;
 	arr<Value> values;
+	Key tombstone = {};
 };
+
+// TODO put this somewhere else
+
+#include "hash.h"
+
+inline u32 hash_impl(u32 v) {
+	return hashFnv132(&v, 1);
+}

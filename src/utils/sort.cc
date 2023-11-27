@@ -81,7 +81,7 @@ void radixSort(u32 *buf, u32 len, Arena scratch) {
         while(beg < end) {
             ++bucket[*beg]; beg += sizeof(u32);
         }
-        // 
+        // check if the current byte is the same in the whole buffer
         bool next = false;
         for(u32 i = 0; i < 256; ++i) {
             if(bucket[i] == len) {
@@ -171,7 +171,7 @@ void radixSort(void *data, u32 len, u32 stride, Arena scratch) {
         while (beg < end) {
             ++bucket[*beg]; beg += stride;
         }
-        // 
+        // check if the current byte is the same in the whole buffer
         bool next = false;
         for (u32 i = 0; i < 256; ++i) {
             if(bucket[i] == len) {

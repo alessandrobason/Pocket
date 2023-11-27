@@ -50,8 +50,6 @@ struct DescriptorLayoutCache {
         arr<VkDescriptorSetLayoutBinding> bindings;
 
         bool operator==(const DescriptorLayoutInfo &other) const;
-
-        u32 hash() const;
     };
 
 private:
@@ -59,6 +57,8 @@ private:
     HashMap<DescriptorLayoutInfo, vkptr<VkDescriptorSetLayout>> layout_cache;
     VkDevice device;
 };
+
+u32 hash_impl(const DescriptorLayoutCache::DescriptorLayoutInfo &v);
 
 struct DescriptorBuilder {
     DescriptorBuilder(DescriptorLayoutCache &c, DescriptorAllocator &a);

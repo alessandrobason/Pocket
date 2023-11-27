@@ -27,10 +27,14 @@ struct VkVertexInputBindingDescription;
 struct VkVertexInputAttributeDescription;
 struct VkPhysicalDeviceProperties;
 struct VkAllocationCallbacks;
+struct VkPushConstantRange;
+struct VkDescriptorSetLayoutBinding;
 
 enum VkFormat;
 enum VkDebugUtilsMessageSeverityFlagBitsEXT;
 enum VkPhysicalDeviceType;
+enum VkShaderStageFlagBits;
+enum VkDescriptorType;
 
 PK_VULKAN_HANDLE(VkCommandBuffer);
 PK_VULKAN_HANDLE(VkShaderModule);

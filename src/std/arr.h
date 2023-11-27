@@ -55,6 +55,17 @@ struct arr {
 		}
 	}
 
+	void resize(usize new_len, const T &value) {
+		while (new_len < len) {
+			pop();
+		}
+
+		reserve(new_len);
+		while (new_len > len) {
+			push(value);
+		}
+	}
+
 	template<typename ...TArgs>
 	T &push(TArgs &&...args) {
 		reserve(len + 1);

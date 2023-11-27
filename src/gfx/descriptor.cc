@@ -94,7 +94,7 @@ VkDescriptorPool DescriptorAllocator::grabPool() {
 
 // == DESCRIPTOR LAYOUT CACHE ================================================================================================================================
 
-// #include <algorithm> // std::sort
+#include <algorithm> // std::sort
 #include "utils/sort.h"
 
 void DescriptorLayoutCache::init(VkDevice new_device) {
@@ -120,12 +120,12 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
     }
 
     if (!is_sorted && !layout_info.bindings.empty()) {
-        radixSort(&layout_info.bindings[0].binding, (u32)layout_info.bindings.len, sizeof(VkDescriptorSetLayoutBinding));
-        // std::sort(layout_info.bindings.begin(), layout_info.bindings.end(), 
-        //     [](const VkDescriptorSetLayoutBinding &a, const VkDescriptorSetLayoutBinding &b) { 
-        //         return a.binding < b.binding; 
-        //     }
-        // );
+        // radixSort(&layout_info.bindings[0].binding, (u32)layout_info.bindings.len, sizeof(VkDescriptorSetLayoutBinding));
+        std::sort(layout_info.bindings.begin(), layout_info.bindings.end(), 
+            [](const VkDescriptorSetLayoutBinding &a, const VkDescriptorSetLayoutBinding &b) { 
+                return a.binding < b.binding; 
+            }
+        );
     }
 
     if (vkptr<VkDescriptorSetLayout> *it = layout_cache.get(layout_info)) {
@@ -155,10 +155,6 @@ bool DescriptorLayoutCache::DescriptorLayoutInfo::operator==(const DescriptorLay
     }
 
     return true;
-}
-
-u32 DescriptorLayoutCache::DescriptorLayoutInfo::hash() const {
-    return hashFnv132(bindings.data(), bindings.byteSize());
 }
 
 // == DESCRIPTOR BUILDER =====================================================================================================================================
@@ -260,4 +256,8 @@ VkDescriptorSet DescriptorBuilder::build(VkDescriptorSetLayout &layout) {
 VkDescriptorSet DescriptorBuilder::build() {
     VkDescriptorSetLayout layout;
     return build(layout);
+}
+
+u32 hash_impl(const DescriptorLayoutCache::DescriptorLayoutInfo &v) {
+    return hashFnv132(v.bindings.data(), v.bindings.byteSize());
 }

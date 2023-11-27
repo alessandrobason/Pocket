@@ -17,6 +17,7 @@
 #include "mesh.h"
 #include "pipeline_builder.h"
 #include "camera.h"
+#include "shader.h"
 #include "core/input.h"
 #include "formats/ini.h"
 
@@ -547,8 +548,9 @@ void Engine::initSyncStructures() {
 }
 
 void Engine::initPipeline() {
-	vkptr<VkShaderModule> vert = loadShaderModule("../../shaders/mesh.vert.spv");
-	vkptr<VkShaderModule> frag = loadShaderModule("../../shaders/triangle.frag.spv");
+#if 0
+	vkptr<VkShaderModule> vert = loadShaderModule("shaders/mesh.vert.spv");
+	vkptr<VkShaderModule> frag = loadShaderModule("shaders/triangle.frag.spv");
 
 	if (!vert) err("could not compile vertex shader");
 	else info("compiled vertex shader");
@@ -579,6 +581,13 @@ void Engine::initPipeline() {
 	vkptr<VkPipelineLayout> pipeline_layout;
 
 	PK_VKCHECK(vkCreatePipelineLayout(m_device, &mesh_pip_layout_info, nullptr, pipeline_layout.getRef()));
+#endif
+
+	ShaderCompiler shader_compiler;
+	shader_compiler.init(m_device);
+	shader_compiler.addStage("shaders/mesh.vert.spv");
+	shader_compiler.addStage("shaders/triangle.frag.spv", { { "scene_data", VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC } });
+	shader_compiler.build(m_desc_cache);
 
 	PipelineBuilder pipeline_builder;
 	
@@ -590,18 +599,19 @@ void Engine::initPipeline() {
 		.setRasterizer(VK_CULL_MODE_NONE)
 		.setColourBlend()
 		.setMultisampling(VK_SAMPLE_COUNT_1_BIT)
-		.setLayout(pipeline_layout)
 		.setDepthStencil(VK_COMPARE_OP_LESS_OR_EQUAL)
-		.pushShader(VK_SHADER_STAGE_VERTEX_BIT, vert)
-		.pushShader(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
+		.pushShaders(shader_compiler)
+		//.setLayout(pipeline_layout)
+		//.pushShader(VK_SHADER_STAGE_VERTEX_BIT, vert)
+		//.pushShader(VK_SHADER_STAGE_FRAGMENT_BIT, frag)
 		.setDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR })
 		.build(m_device, m_render_pass);
 
-	makeMaterial(mesh_pip, pipeline_layout, "default");
-	makeMaterial(mesh_pip, pipeline_layout, "texturedmesh");
+	makeMaterial(mesh_pip, shader_compiler.pipeline_layout, "default");
+	makeMaterial(mesh_pip, shader_compiler.pipeline_layout, "texturedmesh");
 
 	m_pipeline_cache.push(mem::move(mesh_pip));
-	m_pipeline_layout_cache.push(mem::move(pipeline_layout));
+	m_pipeline_layout_cache.push(mem::move(shader_compiler.pipeline_layout));
 }
 
 void Engine::initDescriptors() {
@@ -654,7 +664,7 @@ void Engine::initDescriptors() {
 
 		frame.global_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
 			.bindBuffer(0, { frame.camera_buf, 0, sizeof(GPUCameraData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-			.bindBuffer(1, { m_scene_params_buf, 0, sizeof(SceneData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+			.bindBuffer(1, { m_scene_params_buf, 0, sizeof(SceneData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT)
 			.build(m_global_set_layout);
 
 		frame.object_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
@@ -664,9 +674,9 @@ void Engine::initDescriptors() {
 }
 
 void Engine::initScene() {
-    loadMesh("../../assets/imported/monkey_smooth.mesh", "monkey");
-    // loadMesh("../../assets/imported/lost_empire.mesh", "lost_empire");
-    // loadMesh("../../assets/imported/triangle.mesh", "triangle");
+    loadMesh("assets/imported/monkey_smooth.mesh", "monkey");
+    // loadMesh("assets/imported/lost_empire.mesh", "lost_empire");
+    // loadMesh("assets/imported/triangle.mesh", "triangle");
 
     RenderObject map = {
         .mesh = getMesh("monkey"),
@@ -752,7 +762,7 @@ void Engine::resizeWindow(int new_width, int new_height) {
 
 void Engine::loadImages() {
 	Texture lost_empire;
-    lost_empire.load(*this, "../../assets/imported/lost_empire-RGBA.tx");
+    lost_empire.load(*this, "assets/imported/lost_empire-RGBA.tx");
 
 	VkImageViewCreateInfo image_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -958,20 +968,20 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 			}
 		}
 
-		float time_passed = (float)SDL_GetTicks64() / 1000.f;
-		Mesh::PushConstants constants = {
-			.data = { 0, 0, 0, time_passed },
-			.model = obj.matrix,
-		};
+		//float time_passed = (float)SDL_GetTicks64() / 1000.f;
+		//Mesh::PushConstants constants = {
+		//	.data = { 0, 0, 0, time_passed },
+		//	.model = obj.matrix,
+		//};
 
-		vkCmdPushConstants(
-			cmd,
-			obj.material->layout_ref,
-			VK_SHADER_STAGE_VERTEX_BIT,
-			0,
-			sizeof(Mesh::PushConstants),
-			&constants
-		);
+		//vkCmdPushConstants(
+		//	cmd,
+		//	obj.material->layout_ref,
+		//	VK_SHADER_STAGE_VERTEX_BIT,
+		//	0,
+		//	sizeof(Mesh::PushConstants),
+		//	&constants
+		//);
 
 		if (obj.mesh != last_mesh) {
 			VkDeviceSize offset = 0;

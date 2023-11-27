@@ -52,7 +52,6 @@ struct Str {
     bool isOwned() const;
 
     u32 hash() const;
-    u64 hash64() const;
 
     char *begin();
     char *end();
@@ -116,7 +115,6 @@ struct StrView {
     usize findLastNotOf(StrView view, isize from_end = -1);
 
     u32 hash() const;
-    u64 hash64() const;
 
     const char *data();
     const char *c_str() const;
@@ -163,7 +161,6 @@ struct StaticStr {
     bool empty()                         const { return strlen(buf) == 0; }
 
     u32 hash()   const { return StrView(buf, len).hash(); }
-    u64 hash64() const { return StrView(buf, len).hash64(); }
 
     const char *data()        { return buf; }
     const char *c_str() const { return buf; }
@@ -191,3 +188,8 @@ struct StaticStr {
     char buf[N] = {0};
     usize len;
 };
+
+u32 hash_impl(const Str &v);
+u32 hash_impl(const StrView &v);
+template<usize N>
+u32 hash_impl(const StaticStr<N> &v) { return hash_impl(StrView(v.buf, v.len)); }

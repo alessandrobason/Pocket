@@ -6,6 +6,8 @@
 #include "std/slice.h"
 #include "mesh.h"
 
+struct ShaderCompiler;
+
 struct PipelineBuilder {
 	arr<VkPipelineShaderStageCreateInfo> m_shader_stages;
 	VkPipelineVertexInputStateCreateInfo m_vtx_input;
@@ -19,7 +21,9 @@ struct PipelineBuilder {
 	VkPipelineDepthStencilStateCreateInfo m_depth_stencil;
 	VkPipelineDynamicStateCreateInfo m_dyn_create_info;
 
+	static PipelineBuilder begin();
 	PipelineBuilder &pushShader(VkShaderStageFlagBits stage, VkShaderModule shader, const char *entry = "main");
+	PipelineBuilder &pushShaders(ShaderCompiler &compiler);
 	PipelineBuilder &setVertexInput(const VertexInDesc &vtx_desc);
 	PipelineBuilder &setVertexInput(const VkVertexInputBindingDescription *bindings, u32 bcount, const VkVertexInputAttributeDescription *attributes, u32 acount);
 	PipelineBuilder &setInputAssembly(VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
