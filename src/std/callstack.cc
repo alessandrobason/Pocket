@@ -3,26 +3,27 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <dbghelp.h>
+#include <stdio.h>
 
 #include "std/logging.h"
 
 #pragma comment(lib, "DbgHelp")
 
-void csInit() {
+void stack::init() {
     HANDLE process = GetCurrentProcess();
     if (!SymInitialize(process, NULL, TRUE)) {
         err("call to SymInitialize failed: %u", GetLastError());
     }
 }
 
-void csCleanup() {
+void stack::cleanup() {
     HANDLE process = GetCurrentProcess();
     if (!SymCleanup(process)) {
         err("call to SymCleanup failed: %u", GetLastError());
     }
 }
 
-void printCallStack() {
+void stack::print() {
     HANDLE process = GetCurrentProcess();
     void *stack[1024] = {};
     WORD frame_count = RtlCaptureStackBackTrace(0, 1024, stack, nullptr);
@@ -36,6 +37,8 @@ void printCallStack() {
     IMAGEHLP_LINE64 line;
     line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 
+    info("Stack Trace:");
+
     for (WORD i = 0; i < frame_count; ++i) {
         DWORD64 address = (DWORD64)stack[i];
         if (!SymFromAddr(process, address, nullptr, symbol)) {
@@ -46,6 +49,6 @@ void printCallStack() {
             break;
         }
 
-        info("at %s in %s:%lu", symbol->Name, line.FileName, line.LineNumber);
+        printf("\t-> %s in %s:%u\n", symbol->Name, line.FileName, line.LineNumber);
     }
 }

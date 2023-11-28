@@ -13,6 +13,7 @@
 #include "std/logging.h"
 #include "std/mem.h"
 #include "std/file.h"
+#include "std/callstack.h"
 
 #include "mesh.h"
 #include "pipeline_builder.h"
@@ -20,7 +21,6 @@
 #include "shader.h"
 #include "core/input.h"
 #include "formats/ini.h"
-#include "utils/callstack.h"
 
 #define PK_VKCHECK(x) \
     do { \
@@ -52,10 +52,7 @@ static void setImGuiTheme();
 void Engine::init() {
 	info("Initializing");
 
-	csInit();
-	if (atexit(printCallStack)) {
-		err("!!");
-	}
+	stack::init();
 
 	// We initialize SDL and create a window with it. 
 	SDL_Init(SDL_INIT_VIDEO);
@@ -96,7 +93,7 @@ void Engine::cleanup() {
 	ImGui_ImplVulkan_Shutdown();
 	SDL_DestroyWindow(m_window);
 	
-	csCleanup();
+	stack::cleanup();
 }
 
 void Engine::run() {

@@ -28,7 +28,7 @@ Arena Arena::make(usize initial_allocation, Type type) {
         case Virtual: return arena__make_virtual(initial_allocation);
         case Malloc:  return arena__make_malloc(initial_allocation);
         case Static:  err("Can't initialise static arena using Arena::make, call Arena::makeStatic with your buffer instead"); break;
-        default:      err("Invalid arena type provided: %u", type & __TypeMask); break;
+        default:      err("Invalid arena type provided: %u %u", type, type & __TypeMask); break;
     }
 
     return {};
@@ -58,6 +58,7 @@ void Arena::cleanup() {
     switch (type & __TypeMask) {
         case Virtual: return arena__free_virtual(*this);
         case Malloc:  return arena__free_malloc(*this);
+        case 0:       return;
         default:      err("Invalid arena type provided: %u", type & __TypeMask); break;
     }
 }

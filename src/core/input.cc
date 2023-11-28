@@ -66,11 +66,9 @@ void inputEvent(const union SDL_Event &event) {
             keys[(int)sdl__to_key(event.key.keysym.sym)] = false;
             break;
         case SDL_MOUSEBUTTONDOWN:
-            info("down: %u", event.button.button);
             mouse_btns[(int)sdl__to_mouse(event.button.button)] = true;
             break;
         case SDL_MOUSEBUTTONUP:
-            info("up: %u", event.button.button);
             mouse_btns[(int)sdl__to_mouse(event.button.button)] = false;
             break;
         case SDL_MOUSEMOTION:
