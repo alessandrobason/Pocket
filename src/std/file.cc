@@ -1,8 +1,9 @@
 #include "file.h"
 
 #include "logging.h"
+#include "filesystem.h"
 
-File::File(const char *filename, Mode mode) {
+File::File(StrView filename, Mode mode) {
     open(filename, mode);
 }
 
@@ -10,10 +11,10 @@ File::~File() {
     close();
 }
 
-arr<byte> File::readWhole(const char *fname) {
+arr<byte> File::readWhole(StrView fname) {
     File fp = File(fname, File::Read);
     if (!fp.isValid()) {
-        err("could not open file %s", fname);
+        err("could not open file %.*s", fname.len, fname.buf);
         return {};
     }
 
@@ -22,14 +23,14 @@ arr<byte> File::readWhole(const char *fname) {
 
     bool success = fp.read(out.buf, out.len);
     if (!success) {
-        err("could not read data from file %s", fname);
+        err("could not read data from file %.*s", fname.len, fname.buf);
         return {};
     }
 
     return out;
 }
 
-Str File::readWholeText(const char *fname) {
+Str File::readWholeText(StrView fname) {
     File fp = File(fname, File::Read);
     if (!fp.isValid()) {
         err("could not open file %s", fname);
@@ -48,7 +49,7 @@ Str File::readWholeText(const char *fname) {
     return out;
 }
 
-Str File::readWholeText(Arena &arena, const char *fname) {
+Str File::readWholeText(Arena &arena, StrView fname) {
     File fp = File(fname, File::Read);
     if (!fp.isValid()) {
         err("could not open file %s", fname);
@@ -67,7 +68,7 @@ Str File::readWholeText(Arena &arena, const char *fname) {
     return out;
 }
 
-bool File::writeWhole(const char *fname, Slice<byte> data) {
+bool File::writeWhole(StrView fname, Slice<byte> data) {
     File fp = File(fname, File::Write);
     if (!fp.isValid()) {
         err("could not open file %s", fname);
@@ -77,7 +78,7 @@ bool File::writeWhole(const char *fname, Slice<byte> data) {
     return fp.write(data.buf, data.len);
 }
 
-bool File::writeWhole(const char *fname, StrView string) {
+bool File::writeWhole(StrView fname, StrView string) {
     return writeWhole(fname, Slice<char>(string.buf, string.len));
 }
 
@@ -110,24 +111,27 @@ static uint file__to_win32_creation(File::Mode mode) {
     return 0;
 }
 
-u64 File::getTime(const char *path) {
+u64 File::getTime(StrView path) {
     u64 time = File(path, File::Read).getTime();
     return time;
 }
 
-bool File::exists(const char *fname) {
-    if (!fname) return false;
-    return GetFileAttributesA(fname) != INVALID_FILE_ATTRIBUTES;
+bool File::exists(StrView fname) {
+    if (fname.empty()) return false;
+    fs::Path full_path = fs::getPath(fname);
+    return GetFileAttributesA(full_path.cstr()) != INVALID_FILE_ATTRIBUTES;
 }
 
-bool File::open(const char *fname, Mode mode) {
-    if (!fname) {
+bool File::open(StrView fname, Mode mode) {
+    if (fname.empty()) {
         err("null filename passed to File::open");
         return false;
     }
 
+    fs::Path full_path = fs::getPath(fname);
+
     file_ptr = (uptr)CreateFileA(
-        fname,
+        full_path.cstr(),
         file__to_win32_access(mode),
         0,
         nullptr,
@@ -203,19 +207,19 @@ u64 File::getTime() {
 // TODO use linux specific stuff?
 #include <stdio.h>
 
-u64 File::getTime(const char *path) {
+u64 File::getTime(StrView path) {
     if (!path) return 0;
     // TODO linux
     pk_assert(false);
 }
 
-bool File::exists(const char *fname) {
+bool File::exists(StrView fname) {
     FILE *fp = fopen(fname, "rb");
     if (fp) fclose(fp);
     return fp != nullptr;
 }
 
-bool File::open(const char *fname, Mode mode) {
+bool File::open(StrView fname, Mode mode) {
     const char *m = "rb";
     switch (mode) {
         case File::Read:  m = "rb"; break;

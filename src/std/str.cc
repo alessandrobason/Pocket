@@ -93,6 +93,26 @@ Str Str::fmtv(Arena &arena, const char *fmt, va_list args) {
     return ostr.asStr();
 }
 
+Str Str::cat(Slice<StrView> strings) {
+    usize total_size = 0;
+    for (StrView s : strings) {
+        total_size += s.len;
+    }
+    
+    char *buf = (char *)pk_malloc(total_size + 1);
+    pk_assert(buf);
+
+    char *cur = buf;
+    for (StrView s : strings) {
+        memcpy(cur, s.buf, s.len);
+        cur += s.len;
+    }
+
+    Str out;
+    out.moveFrom(buf, total_size);
+    return out;
+}
+
 void Str::init(const char *cstr, usize cstr_len) {
     buf = (char *)pk_malloc(cstr_len + 1);
     pk_assert(buf);
@@ -512,7 +532,7 @@ const char *StrView::data() {
     return buf;
 }
 
-const char *StrView::c_str() const {
+const char *StrView::cstr() const {
     return buf;
 }
 
@@ -528,17 +548,17 @@ const char *StrView::end() const {
     return buf + len;
 }
 
-const char &StrView::back() const {
+char StrView::back() const {
     pk_assert(!empty());
     return buf[len - 1];
 }
 
-const char &StrView::front() const {
+char StrView::front() const {
     pk_assert(!empty());
     return buf[0];
 }
 
-const char &StrView::operator[](usize index) const {
+char StrView::operator[](usize index) const {
     pk_assert(index < len);
     return buf[index];
 }

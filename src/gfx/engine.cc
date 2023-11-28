@@ -20,6 +20,7 @@
 #include "shader.h"
 #include "core/input.h"
 #include "formats/ini.h"
+#include "utils/callstack.h"
 
 #define PK_VKCHECK(x) \
     do { \
@@ -50,6 +51,11 @@ static void setImGuiTheme();
 
 void Engine::init() {
 	info("Initializing");
+
+	csInit();
+	if (atexit(printCallStack)) {
+		err("!!");
+	}
 
 	// We initialize SDL and create a window with it. 
 	SDL_Init(SDL_INIT_VIDEO);
@@ -89,6 +95,8 @@ void Engine::cleanup() {
 
 	ImGui_ImplVulkan_Shutdown();
 	SDL_DestroyWindow(m_window);
+	
+	csCleanup();
 }
 
 void Engine::run() {
@@ -241,7 +249,7 @@ void Engine::initGfx() {
 	auto inst_ret = builder.
 		set_app_name("Vulkan Application")
 		.request_validation_layers(true)
-		.require_api_version(1, 1, 0)
+		.require_api_version(1, 2, 0)
 		.set_debug_callback(vulkan_print_callback)
 		.build();
 
@@ -585,8 +593,8 @@ void Engine::initPipeline() {
 
 	ShaderCompiler shader_compiler;
 	shader_compiler.init(m_device);
-	shader_compiler.addStage("shaders/mesh.vert.spv");
-	shader_compiler.addStage("shaders/triangle.frag.spv", { { "scene_data", VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC } });
+	shader_compiler.addStage("shaders/spv/mesh.vert.spv");
+	shader_compiler.addStage("shaders/spv/triangle.frag.spv", { { "scene_data", VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC } });
 	shader_compiler.build(m_desc_cache);
 
 	PipelineBuilder pipeline_builder;
@@ -674,9 +682,9 @@ void Engine::initDescriptors() {
 }
 
 void Engine::initScene() {
-    loadMesh("assets/imported/monkey_smooth.mesh", "monkey");
-    // loadMesh("assets/imported/lost_empire.mesh", "lost_empire");
-    // loadMesh("assets/imported/triangle.mesh", "triangle");
+    loadMesh("imported/monkey_smooth.mesh", "monkey");
+    // loadMesh("imported/lost_empire.mesh", "lost_empire");
+    // loadMesh("imported/triangle.mesh", "triangle");
 
     RenderObject map = {
         .mesh = getMesh("monkey"),
@@ -762,7 +770,7 @@ void Engine::resizeWindow(int new_width, int new_height) {
 
 void Engine::loadImages() {
 	Texture lost_empire;
-    lost_empire.load(*this, "assets/imported/lost_empire-RGBA.tx");
+    lost_empire.load(*this, "imported/lost_empire-RGBA.tx");
 
 	VkImageViewCreateInfo image_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,

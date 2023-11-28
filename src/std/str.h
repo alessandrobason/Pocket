@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "logging.h"
+#include "slice.h"
 
 struct Arena;
 struct StrView;
@@ -26,6 +27,8 @@ struct Str {
     static Str fmtv(const char *fmt, va_list args);
     static Str fmt(Arena &arena, const char *fmt, ...);
     static Str fmtv(Arena &arena, const char *fmt, va_list args);
+
+    static Str cat(Slice<StrView> strings);
 
     void init(const char *cstr, usize cstr_len);
     void init(Arena &arena, const char *cstr, usize cstr_len);
@@ -117,20 +120,14 @@ struct StrView {
     u32 hash() const;
 
     const char *data();
-    const char *c_str() const;
+    const char *cstr() const;
     usize size() const;
     
-    char *begin();
-    char *end();
-    char &back();
-    char &front();
-    char &operator[](usize index);
-
     const char *begin() const;
     const char *end() const;
-    const char &back() const;
-    const char &front() const;
-    const char &operator[](usize index) const;
+    char back() const;
+    char front() const;
+    char operator[](usize index) const;
 
     bool operator==(StrView v) const;
     bool operator!=(StrView v) const;
@@ -144,6 +141,27 @@ struct StaticStr {
     StaticStr() = default;
     StaticStr(StrView str) {
         init(str.buf, str.len);
+    }
+
+    static StaticStr cat(Slice<StrView> strings) {
+        StaticStr out;
+
+        char *cur = out.buf;
+        char *end = out.buf + N;
+
+        for (StrView s : strings) {
+            if (cur + s.len >= end) {
+                cur = end - 1;
+                break;
+            }
+            memcpy(cur, s.buf, s.len);
+            cur += s.len;
+        }
+
+        out.len = cur - out.buf;
+        out.buf[out.len] = '\0';
+
+        return out;
     }
 
     void init(const char *str, usize new_len) {
@@ -163,7 +181,7 @@ struct StaticStr {
     u32 hash()   const { return StrView(buf, len).hash(); }
 
     const char *data()        { return buf; }
-    const char *c_str() const { return buf; }
+    const char *cstr() const  { return buf; }
     usize size()        const { return len; }
 
     char *begin() { return buf; }

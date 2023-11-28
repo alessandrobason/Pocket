@@ -16,25 +16,25 @@ struct File {
     };
 
     File() = default;
-    File(const char *filename, Mode mode = Read);
+    File(StrView filename, Mode mode = Read);
     ~File();
 
-    static u64 getTime(const char *path);
-    static bool exists(const char *fname);
-    static arr<byte> readWhole(const char *fname);
-    static Str readWholeText(const char *fname);
+    static u64 getTime(StrView path);
+    static bool exists(StrView fname);
+    static arr<byte> readWhole(StrView fname);
+    static Str readWholeText(StrView fname);
 
     //static arr<byte> readWhole(Arena &arena, const char *fname);
-    static Str readWholeText(Arena &arena, const char *fname);
+    static Str readWholeText(Arena &arena, StrView fname);
 
-    static bool writeWhole(const char *fname, Slice<byte> data);
-    static bool writeWhole(const char *fname, StrView string);
+    static bool writeWhole(StrView fname, Slice<byte> data);
+    static bool writeWhole(StrView fname, StrView string);
     template<typename T>
-    static bool writeWhole(const char *fname, Slice<T> data) {
+    static bool writeWhole(StrView fname, Slice<T> data) {
         return writeWhole(fname, Slice<byte>((byte *)data.buf, data.byteSize()));
     }
 
-    bool open(const char *fname, Mode mode = Read);
+    bool open(StrView fname, Mode mode = Read);
     void close();
 
     bool isValid() const;
