@@ -1,9 +1,10 @@
-file(GLOB PK_STD   "std/*.h"     "std/*.cc")
-file(GLOB PK_FMT   "formats/*.h" "formats/*.cc")
-file(GLOB PK_GFX   "gfx/*.h"     "gfx/*.cc")
-file(GLOB PK_UTILS "utils/*.h"   "utils/*.cc")
-file(GLOB PK_CORE  "core/*.h"    "core/*.cc")
-file(GLOB PK_SRC   "*.h"         "*.cc")
+file(GLOB PK_STD    "std/*.h"     "std/*.cc")
+file(GLOB PK_FMT    "formats/*.h" "formats/*.cc")
+file(GLOB PK_GFX    "gfx/*.h"     "gfx/*.cc")
+file(GLOB PK_UTILS  "utils/*.h"   "utils/*.cc")
+file(GLOB PK_CORE   "core/*.h"    "core/*.cc")
+file(GLOB PK_ASSETS "assets/*.h"  "assets/*.cc")
+file(GLOB PK_SRC    "*.h"         "*.cc")
 
 add_library(pocket_std STATIC)
 target_sources(pocket_std PRIVATE ${PK_STD})
@@ -19,16 +20,18 @@ add_executable(pocket
     ${PK_GFX}
     ${PK_UTILS}
 	${PK_CORE}
+	${PK_ASSETS}
 	${PK_SRC}
     "../pocket.natvis"
 )
 
-source_group("src"   FILES ${PK_STD})
-source_group("src"   FILES ${PK_FMT})
-source_group("gfx"   FILES ${PK_GFX})
-source_group("utils" FILES ${PK_UTILS})
-source_group("core"  FILES ${PK_CORE})
-source_group("src"   FILES ${PK_SRC})
+source_group("src"    FILES ${PK_STD})
+source_group("src"    FILES ${PK_FMT})
+source_group("gfx"    FILES ${PK_GFX})
+source_group("utils"  FILES ${PK_UTILS})
+source_group("core"   FILES ${PK_CORE})
+source_group("assets" FILES ${PK_ASSETS})
+source_group("src"    FILES ${PK_SRC})
 
 set_property(TARGET pocket PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:pocket>")
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT pocket)

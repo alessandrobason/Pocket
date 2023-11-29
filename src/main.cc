@@ -4,10 +4,10 @@
 
 #include "gfx/engine.h"
 
-#include "core/thread_pool.h"
-
 #include <iostream>
 #include <windows.h>
+
+Engine *g_engine = nullptr;
 
 int main(int argc, char* argv[]) {
 	Arena log_arena = Arena::make(gb(1));
@@ -25,22 +25,8 @@ int main(int argc, char* argv[]) {
 
 	fs::setBaseFolder(asset_folder);
 
-	ThreadPool thr_pool;
-	thr_pool.start(3);
-	
-	thr_pool.pushJob([](){ info("sleeping for 1s"); Sleep(1000); info("finished 1s"); });
-	thr_pool.pushJob([](){ info("sleeping for 2s"); Sleep(2000); info("finished 2s"); });
-	thr_pool.pushJob([](){ info("sleeping for 3s"); Sleep(3000); info("finished 3s"); });
-	thr_pool.pushJob([](){ info("sleeping for 4s"); Sleep(4000); info("finished 4s"); });
-	thr_pool.pushJob([](){ info("sleeping for 5s"); Sleep(5000); info("finished 5s"); });
-	thr_pool.pushJob([](){ info("sleeping for 6s"); Sleep(6000); info("finished 6s"); });
-
-	while (thr_pool.isBusy()) {
-		Sleep(100);
-	}
-	thr_pool.stop();
-
 	Engine engine;
+	g_engine = &engine;
 
 	engine.init();	
 	

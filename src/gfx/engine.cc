@@ -42,13 +42,6 @@ static u32 vulkan_print_callback(
 );
 static void setImGuiTheme();
 
-// void DeletionQueue::flush() {
-//     for (const auto &del : m_deleters) {
-//         del();
-//     }
-//     m_deleters.clear();
-// }
-
 void Engine::init() {
 	info("Initializing");
 

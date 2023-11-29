@@ -55,7 +55,6 @@ private:
     Arena queue_arena = Arena::make(gb(1), Arena::Virtual);
     uint max_jobs_per_thread = 5;
 
-    // CondVar job_cond;
     Mutex stop_mtx;
     Mutex queue_mtx;
 

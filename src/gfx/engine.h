@@ -25,6 +25,9 @@ constexpr uint kframe_overlap = 2;
 // Forward declare SDL stuff
 struct SDL_Window;
 
+struct Engine;
+extern Engine *g_engine;
+
 struct Engine {
     // forward declare
     struct RenderObject;
