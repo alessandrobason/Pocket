@@ -10,6 +10,9 @@ namespace AssetManager {
 
 template<typename T>
 struct Handle {
+    Handle() = default;
+    Handle(u32 value) : value(value) {}
+
     bool isLoaded() {
         return AssetManager::isLoaded<T>(value);
     }

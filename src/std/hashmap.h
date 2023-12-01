@@ -3,8 +3,6 @@
 #include "common.h"
 #include "arr.h"
 
-u32 hash_impl(u32 v);
-
 // TODO: if < X items, fallback to linear search and array
 // TODO: better api?
 
@@ -80,7 +78,7 @@ struct HashMap {
 		//u32 hash = key.hash() & ((u32)keys.size() - 1);
 
         // maximum number of iterations
-        for (size_t i = 0; i < keys.size(); ++i) {
+        for (usize i = 0; i < keys.size(); ++i) {
             // unique, doesn't exist
             if (keys[hash] == tombstone) {
 				return nullptr;
@@ -150,7 +148,7 @@ private:
 		hash &= (u32)keys.size() - 1;
 
         // maximum number of iterations
-        for (size_t i = 0; i < keys.size(); ++i) {
+        for (usize i = 0; i < keys.size(); ++i) {
             // unique
             if (keys[hash] == tombstone) {
                 keys[hash] = key;
@@ -179,11 +177,3 @@ private:
 	arr<Value> values;
 	Key tombstone = {};
 };
-
-// TODO put this somewhere else
-
-#include "hash.h"
-
-inline u32 hash_impl(u32 v) {
-	return hashFnv132(&v, 1);
-}

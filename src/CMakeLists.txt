@@ -38,6 +38,6 @@ set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT p
 set_property(TARGET pocket PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 target_include_directories(pocket PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(pocket PRIVATE pocket_std pocket_formats vkbootstrap vma glm tinyobjloader imgui stb_image spirv-reflect)
+target_link_libraries(pocket PRIVATE pocket_std pocket_formats vkbootstrap vma glm tinyobjloader imgui stb_image spirv-reflect minicoro)
 
 add_dependencies(pocket Shaders)

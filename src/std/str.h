@@ -10,6 +10,14 @@
 struct Arena;
 struct StrView;
 
+namespace StrUtils {
+    wchar_t *ansiToWide(const char *cstr, usize cstr_len, usize &wstr_len);
+    char *wideToAnsi(const wchar_t *wstr, usize wstr_len, usize &cstr_len);
+
+    bool ansiToWide(const char *cstr, usize cstr_len, wchar_t *buf, usize buflen);
+    bool wideToAnsi(const wchar_t *wstr, usize wstr_len, char *buf, usize buflen);
+} // namespace StrUtils
+
 struct Str {
     Str() = default;
     Str(const char *cstr);
@@ -137,6 +145,45 @@ struct StrView {
 };
 
 template<usize N>
+struct StaticWStr {
+    StaticWStr() = default;
+    StaticWStr(StrView str) {
+        init(str.buf, str.len);
+    }
+
+    void init(const char *str, usize new_len) {
+        if (new_len > (N - 1)) {
+            err("initialising StaticStr with length %zu, but maximum is %zu, truncating", new_len, N);
+            new_len = N - 1;
+        }
+        memcpy(buf, str, new_len);
+        buf[new_len] = 0;
+        len = new_len;
+    }
+
+    bool empty()                         const { return len == 0; }
+
+    const wchar_t *data()        { return buf; }
+    const wchar_t *cwstr() const { return buf; }
+    usize size()           const { return len; }
+
+    wchar_t *begin() { return buf; }
+    wchar_t *end()   { return buf + len; }
+    wchar_t &back()  { return len ? buf[len - 1] : buf[0]; }
+    wchar_t &front() { return buf[0]; }
+    wchar_t &operator[](usize index) { pk_assert(index < (len - 1)); return buf[index]; }
+
+    const wchar_t *begin() const { return buf; }
+    const wchar_t *end()   const { return buf + len; }
+    const wchar_t &back()  const { return len ? buf[len - 1] : buf[0]; }
+    const wchar_t &front() const { return buf[0]; }
+    const wchar_t &operator[](usize index) const { pk_assert(index < (len - 1)); return buf[index]; }
+
+    wchar_t buf[N] = {0};
+    usize len;
+};
+
+template<usize N>
 struct StaticStr {
     StaticStr() = default;
     StaticStr(StrView str) {
@@ -176,7 +223,7 @@ struct StaticStr {
 
     Str dup(Arena &arena)                const { return StrView(buf, len).dup(); }
     StrView sub(usize from = 0, usize to = -1) { return StrView(buf, len).sub(from, to); }
-    bool empty()                         const { return strlen(buf) == 0; }
+    bool empty()                         const { return len == 0; }
 
     u32 hash()   const { return StrView(buf, len).hash(); }
 

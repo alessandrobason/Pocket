@@ -44,6 +44,12 @@ struct arr {
 		}
 	}
 
+	// resize without constructing the objects
+	void grow(usize new_len) {
+		reserve(new_len);
+		len = new_len;
+	}
+
 	void resize(usize new_len) {
 		while (new_len < len) {
 			pop();

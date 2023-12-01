@@ -10,6 +10,96 @@
 #include "stream.h"
 #include "hash.h"
 
+#include <windows.h>
+
+namespace StrUtils {
+    wchar_t *ansiToWide(const char *cstr, usize cstr_len, usize &wstr_len) {
+        int wlen = MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            cstr, (int)cstr_len,
+            nullptr, 0
+        );
+
+        if (wlen == 0) {
+            err("could not convert utf8 string (%s) to wide string: %u", cstr, GetLastError());
+            return nullptr;
+        }
+
+        wchar_t *wstr = (wchar_t *)pk_malloc((wlen + 1) * sizeof(wchar_t));
+        int result = MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            cstr, cstr_len,
+            wstr, wlen
+        );
+
+        if (result == 0) {
+            err("could not convert utf8 string (%s) to wide string: %u", cstr, GetLastError());
+            pk_free(wstr);
+            return nullptr;
+        }
+
+        wstr[wlen] = 0;
+        wstr_len = (usize)wlen;
+        return wstr;
+    }
+
+    char *wideToAnsi(const wchar_t *wstr, usize wstr_len, usize &cstr_len) {
+        int clen = WideCharToMultiByte(
+            CP_UTF8, 0,
+            wstr, (int)wstr_len,
+            nullptr, 0,
+            nullptr, nullptr
+        );
+
+        if (clen == 0) {
+            err("could not convert wide string (%S) to utf8 string: %u", wstr, GetLastError());
+            return nullptr;
+        }
+
+        char *cstr = (char *)pk_malloc(clen + 1);
+
+        int result = WideCharToMultiByte(
+            CP_UTF8, 0,
+            wstr, (int)wstr_len,
+            cstr, clen,
+            nullptr, nullptr
+        );
+
+        if (result == 0) {
+            err("could not convert wide string (%S) to utf8 string: %u", wstr, GetLastError());
+            return nullptr;
+        }
+        
+        cstr[clen] = '\0';
+        cstr_len = (usize)clen;
+        return cstr;
+    }
+
+    bool ansiToWide(const char *cstr, usize cstr_len, wchar_t *buf, usize buflen) {
+        int result = MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            cstr, cstr_len,
+            buf, (int)buflen
+        );
+        
+        return result > 0;
+    }
+
+    bool wideToAnsi(const wchar_t *wstr, usize wstr_len, char *buf, usize buflen) {
+        int result = WideCharToMultiByte(
+            CP_UTF8, 0,
+            wstr, (int)wstr_len,
+            buf, (int)buflen,
+            nullptr, nullptr
+        );
+
+        return result > 0;
+    }
+} // namespace StrUtils
+
 // use left-most bit as bitflag for owning
 static constexpr u64 str_not_owned_flags = 1ull << 63;
 static constexpr u64 str_size_mask = ~str_not_owned_flags;

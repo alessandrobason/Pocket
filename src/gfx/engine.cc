@@ -15,6 +15,8 @@
 #include "std/file.h"
 #include "std/callstack.h"
 
+#include "assets/asset_manager.h"
+
 #include "mesh.h"
 #include "pipeline_builder.h"
 #include "camera.h"
@@ -46,6 +48,7 @@ void Engine::init() {
 	info("Initializing");
 
 	stack::init();
+	jobpool.start(5);
 
 	// We initialize SDL and create a window with it. 
 	SDL_Init(SDL_INIT_VIDEO);
@@ -71,9 +74,16 @@ void Engine::init() {
 	initSyncStructures();
 	initDescriptors();
 	initPipeline();
+
+	AssetManager::loadDefaults();
+	while (jobpool.isBusy()) {
+		//
+	}
+
 	loadImages();
 	initScene();
 	initImGui();
+
 }
 
 void Engine::cleanup() {
@@ -87,6 +97,7 @@ void Engine::cleanup() {
 	SDL_DestroyWindow(m_window);
 	
 	stack::cleanup();
+	jobpool.stop();
 }
 
 void Engine::run() {
@@ -277,6 +288,9 @@ void Engine::initGfx() {
 	m_gfxqueue = vkb_device.get_queue(vkb::QueueType::graphics).value();
 	m_gfxqueue_family = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
 
+	m_transferqueue = vkb_device.get_queue(vkb::QueueType::transfer).value();
+	m_transferqueue_family = vkb_device.get_queue_index(vkb::QueueType::transfer).value();
+
 	VmaAllocatorCreateInfo alloc_info = {
 		.physicalDevice = m_chosen_gpu,
 		.device = m_device,
@@ -385,7 +399,6 @@ void Engine::initSwapchain() {
 	};
 
 	PK_VKCHECK(vkCreateImageView(m_device, &depth_view_info, nullptr, m_depth_view.getRef()));
-
 }
 
 void Engine::initCommandBuffers() {
@@ -413,6 +426,10 @@ void Engine::initCommandBuffers() {
 
 	cmdalloc_info.commandPool = m_upload_ctx.pool;
 	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, &m_upload_ctx.buffer));
+
+
+	PK_VKCHECK(vkCreateCommandPool(m_device, &cmdpool_info, nullptr, m_transfer_pool.getRef()));
+	cmdalloc_info.commandPool = m_transfer_pool;
 }
 
 void Engine::initDefaultRenderPass() {
@@ -698,7 +715,7 @@ void Engine::initScene() {
 	Material* textured_mat = getMaterial("texturedmesh");
 
 	textured_mat->texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-		.bindImage(0, { blocky_sampler, m_textures.get("empire_diffuse")->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+	//	.bindImage(0, { blocky_sampler, m_textures.get("empire_diffuse")->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 		.build();
 
 	m_sampler_cache.push(mem::move(blocky_sampler));
@@ -759,6 +776,7 @@ void Engine::resizeWindow(int new_width, int new_height) {
 }
 
 void Engine::loadImages() {
+#if 0
 	Texture lost_empire;
     lost_empire.load(*this, "imported/lost_empire-RGBA.tx");
 
@@ -778,6 +796,7 @@ void Engine::loadImages() {
 	vkCreateImageView(m_device, &image_info, nullptr, lost_empire.view.getRef());
 
 	m_textures.push("empire_diffuse", mem::move(lost_empire));
+#endif
 }
 
 void Engine::draw() {

@@ -9,9 +9,8 @@ struct Engine;
 using Buffer = vkptr<VkBuffer>;
 using Image = vkptr<VkImage>;
 
-struct Texture {
-	Image image;
-	vkptr<VkImageView> view;
-
-	bool load(Engine &engine, const char *filename);
-};
+// struct Texture {
+// 	Image image;
+// 	vkptr<VkImageView> view;
+// 	bool load(Engine &engine, const char *filename);
+// };

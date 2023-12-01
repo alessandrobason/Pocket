@@ -5,7 +5,9 @@
 #include "core/handle.h"
 #include "gfx/vk_ptr.h"
 
-struct Texture {
+#include "asset.h"
+
+struct Texture : Asset {
     static Handle<Texture> load(StrView filename);
 
     vkptr<VkImage> image;

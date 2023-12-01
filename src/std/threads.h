@@ -72,3 +72,9 @@ struct CondVar {
 
     uptr handle = 0;
 };
+
+struct ReadWriteLock {
+
+    
+    Mutex write_mtx;
+};

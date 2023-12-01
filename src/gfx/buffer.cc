@@ -8,6 +8,7 @@
 #include "formats/assets.h"
 #include "engine.h"
 
+#if 0
 static Image texture__upload(u32 width, u32 height, VkFormat format, Engine &engine, Buffer &&staging_buf) {
     VkExtent3D image_extent = {
         .width = width,
@@ -144,3 +145,4 @@ bool Texture::load(Engine &engine, const char *filename) {
 
     return true;
 }
+#endif

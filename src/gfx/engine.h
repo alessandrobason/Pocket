@@ -10,6 +10,8 @@
 #include "std/hashmap.h"
 #include "std/vec.h"
 
+#include "core/thread_pool.h"
+
 // #include "utils/glm.h"
 
 #include "vk_fwd.h"
@@ -129,12 +131,19 @@ struct Engine {
 	vkptr<VmaAllocator> m_allocator;
 	vkptr<VkDescriptorPool> m_imgui_pool;
 
+    ThreadPool jobpool;
+
     DescriptorLayoutCache m_desc_cache;
     DescriptorAllocator m_desc_alloc;
 
 	VkQueue m_gfxqueue = nullptr;
 	u32 m_gfxqueue_family = 0;
 
+    VkQueue m_transferqueue = nullptr;
+    u32 m_transferqueue_family = 0;
+    vkptr<VkCommandPool> m_transfer_pool;
+    VkCommandBuffer m_transfer_buf;
+    
     FrameData m_frames[kframe_overlap];
 
 	vkptr<VkRenderPass> m_render_pass;
@@ -156,7 +165,7 @@ struct Engine {
 	arr<RenderObject> m_drawable;
 	HashMap<StrView, Material> m_materials;
 	HashMap<StrView, Mesh> m_meshes;
-	HashMap<StrView, Texture> m_textures;
+	//HashMap<StrView, Texture> m_textures;
     
 	SceneData m_scene_params;
 	Buffer m_scene_params_buf;

@@ -66,7 +66,11 @@ namespace mem {
 			pk_free(buf);
 			buf = nullptr; 
 		}
-		T *release() { T *temp = buf; buf = nullptr; return temp; }
+		T *release() { 
+			T *temp = buf; 
+			buf = nullptr; 
+			return temp; 
+		}
 
 		operator bool() const { return buf != nullptr; }
 		T *get() { return buf; }

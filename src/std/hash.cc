@@ -27,3 +27,12 @@ u64 hashFnv164(const void *data, usize len) {
 
     return hash;
 }
+
+u32 hash_impl(const u32 &v) {
+    return hashFnv132(&v, sizeof(u32));
+}
+
+
+u32 hash_impl(const u64 &v) {
+    return hashFnv132(&v, sizeof(u64));
+}

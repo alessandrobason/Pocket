@@ -12,5 +12,5 @@ void fs::setBaseFolder(StrView folder) {
 }
 
 fs::Path fs::getPath(StrView relative) {
-    return fs::Path::cat({ base_folder, "/", relative });
+    return fs::Path::cat({ base_folder, relative });
 }
