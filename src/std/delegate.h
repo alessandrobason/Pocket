@@ -2,6 +2,7 @@
 
 #include <new>
 #include "mem.h"
+#include "arena.h"
 
 template <class T>
 constexpr T&& fwd(std::remove_reference_t<T>& arg) noexcept {
@@ -32,6 +33,11 @@ struct Callable<T, TRet(TArgs...)> : CallableBase<TRet(TArgs...)> {
 
     Callable() = default;
     Callable(T &&storage) : storage(mem::move(storage)) {}
+    // Callable(T &&storage) { init(mem::move(storage)); }
+
+    void init(T &&store) {
+        storage = mem::move(store);
+    }
 
     TRet invoke(TArgs &&...args) {
         return storage(mem::move(args)...);
@@ -46,14 +52,22 @@ struct Delegate<TRet(TArgs...)> {
     Delegate(Func *func_ptr) { init(func_ptr); }
     template<typename T>
     Delegate(T &&lambda) { init(mem::move(lambda)); }
+    template<typename T>
+    Delegate(Arena &arena, T &&lambda) { init(arena, mem::move(lambda)); }
 
     Delegate(Delegate &&other) { *this = mem::move(other); }
 
     ~Delegate() { destroy(); }
 
+    enum Flags : u8 {
+        None         = 0,
+        IsFunctor    = 1 << 0,
+        IsArenaAlloc = 1 << 1,
+    };
+
     void *functor = nullptr;
-    // TODO can be put as the leftmost bit in functor ptr and then use mask
-    bool is_lambda = false;
+    // TODO can be put as two leftmost bit in functor ptr and then use mask
+    Flags flags = None;
 
     void init(Func *func_ptr) {
         functor = func_ptr;
@@ -63,19 +77,29 @@ struct Delegate<TRet(TArgs...)> {
     void init(T &&lambda) {
         static_assert(!std::is_function_v<T> && !std::is_member_function_pointer_v<T>);
         
-        is_lambda = true;
+        flags = IsFunctor;
         functor = pk_calloc(sizeof(Callable<T, Func>), 1);
         // TODO figure out how to use custom placementNew here instead
         new (functor) Callable<T, Func>(mem::forward<T>(lambda));
     }
 
+    template<typename T>
+    void init(Arena &arena, T &&lambda) {
+        static_assert(!std::is_function_v<T> && !std::is_member_function_pointer_v<T>);
+        
+        flags = IsFunctor | IsArenaAlloc;
+        functor = arena.alloc<Callable<T, Func>>();
+        // TODO figure out how to use custom placementNew here instead
+        new (functor) Callable<T, Func>(mem::forward<T>(lambda));
+    }
+
     void destroy() {
-        if (is_lambda) {
-            is_lambda = false;
+        if (flags & IsFunctor && !(flags & IsArenaAlloc)) {
             CallableBase<Func> *call = (CallableBase<Func>*)functor;
             call->~CallableBase();
             pk_free(functor);
         }
+        flags = None;
         functor = nullptr;
     }
 
@@ -86,13 +110,13 @@ struct Delegate<TRet(TArgs...)> {
     Delegate &operator=(Delegate &&other) {
         if (this != &other) {
             mem::swap(functor, other.functor);
-            mem::swap(is_lambda, other.is_lambda);
+            mem::swap(flags, other.flags);
         }
         return *this;
     }
 
     TRet operator()(TArgs &&...args) {
-        if (is_lambda) {
+        if (flags & IsFunctor) {
             return ((CallableBase<Func> *)functor)->invoke(mem::move(args)...);
         }
         return ((Func *)functor)(mem::move(args)...);
