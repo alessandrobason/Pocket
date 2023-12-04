@@ -4,7 +4,7 @@ static fs::Path base_folder = StrView("");
 
 void fs::setBaseFolder(StrView folder) {
     if (folder.back() != '/' && folder.back() != '\\') {
-        base_folder = fs::Path::cat({ folder, "/" });
+        base_folder = fs::Path::cat({ folder, PK_TEXT("/") });
     }
     else {
         base_folder = folder;

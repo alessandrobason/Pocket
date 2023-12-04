@@ -5,7 +5,8 @@
 #include <vk_mem_alloc.h>
 
 #include "std/logging.h"
-#include "std/filesystem.h"
+#include "std/file.h"
+#include "std/asio.h"
 #include "gfx/engine.h"
 
 #include "asset_manager.h"
@@ -123,12 +124,23 @@ Handle<Texture> Texture::load(StrView filename) {
     g_engine->jobpool.pushJob(
         [filename, handle] 
         () {
-            //mem::ptr<Texture> texture = mem::ptr<Texture>::make();
             mem::ptr<Texture> texture = (Texture *)pk_calloc(sizeof(Texture), 1);
             
+            asio::File file;
+            if (!file.init(filename)) {
+                err("could not open texture file: %.*s", filename.len, filename.buf);
+                return;
+            }
+
+            // wait for the file to be read
+            do {
+                co::yield();
+            } while (!file.poll());
+
+            arr<byte> file_data = file.getData();
+
             int width, height, comp;
-            fs::Path path = fs::getPath(filename);
-            byte *data = stbi_load(path.cstr(), &width, &height, &comp, STBI_rgb_alpha);
+            byte *data = stbi_load_from_memory(file_data.buf, (int)file_data.len, &width, &height, &comp, STBI_rgb_alpha);
 
             if (!data) {
                 err("couldn't load image %.*s: %s", filename.len, filename.buf, stbi_failure_reason());

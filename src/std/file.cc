@@ -119,7 +119,7 @@ u64 File::getTime(StrView path) {
 bool File::exists(StrView fname) {
     if (fname.empty()) return false;
     fs::Path full_path = fs::getPath(fname);
-    return GetFileAttributesA(full_path.cstr()) != INVALID_FILE_ATTRIBUTES;
+    return GetFileAttributes(full_path.cstr()) != INVALID_FILE_ATTRIBUTES;
 }
 
 bool File::open(StrView fname, Mode mode) {
@@ -130,7 +130,7 @@ bool File::open(StrView fname, Mode mode) {
 
     fs::Path full_path = fs::getPath(fname);
 
-    file_ptr = (uptr)CreateFileA(
+    file_ptr = (uptr)CreateFile(
         full_path.cstr(),
         file__to_win32_access(mode),
         0,

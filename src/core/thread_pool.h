@@ -1,29 +1,41 @@
 #pragma once
 
-#include <functional>
-#include <atomic>
+// #include <functional>
+// #include <atomic>
 
 #include "std/threads.h"
 #include "std/arena.h"
+#include "std/pair.h"
+#include "std/delegate.h"
 
+#include "core/coroutine.h"
 
 struct ThreadPool {
+    using Job = Delegate<void()>;
+
 	void start(uint initial_thread_count = 5);
     void stop();
     bool isBusy();
-	void pushJob(std::function<void()> &&job);
+	void pushJob(Job &&job);
     void setMaxJobsPerThread(uint max_jobs);
 
 private:
+    struct JobData {
+        Job job;
+        co::Coro coroutine;
+    };
+
     struct Queue {
         struct Node {
-            std::function<void()> value;
+            JobData job_data;
             Node *next = nullptr;
         };
 
         void init(void *wait_handle, void *stop_handle);
-        std::function<void()> pop();
-        void push(std::function<void()> &&fn);
+        JobData *pop();
+        void push(Job &&fn);
+        void yieldJob();
+        void finishJob();
 
         int getJobCount();
 

@@ -25,6 +25,12 @@ namespace mem {
 	RemRefT<T> &&move(T &&val) { return (RemRefT<T> &&)val; }
 
 	template<typename T>
+	constexpr T &&forward(RemRefT<T> &val) { return (T &&)val; }
+
+	// template<typename T>
+	// constexpr T &&forward(RemRefT<T> &&arg) { return (T &&)val; }
+
+	template<typename T>
 	void swap(T &a, T &b) {
 		RemArrT<T> temp = mem::move(a);
 		a = mem::move(b);

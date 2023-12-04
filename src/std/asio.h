@@ -11,6 +11,8 @@ namespace asio {
         ~File();
 
         bool init(StrView filename);
+        bool isValid() const;
+        // returns true when finished
         bool poll();
         arr<byte> &&getData();
 

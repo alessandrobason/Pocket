@@ -13,9 +13,12 @@ struct StrView;
 namespace StrUtils {
     wchar_t *ansiToWide(const char *cstr, usize cstr_len, usize &wstr_len);
     char *wideToAnsi(const wchar_t *wstr, usize wstr_len, usize &cstr_len);
+    
+    wchar_t *ansiToWide(Arena &arena, const char *cstr, usize cstr_len, usize &wstr_len);
+    char *wideToAnsi(Arena &arena, const wchar_t *wstr, usize wstr_len, usize &cstr_len);
 
-    bool ansiToWide(const char *cstr, usize cstr_len, wchar_t *buf, usize buflen);
-    bool wideToAnsi(const wchar_t *wstr, usize wstr_len, char *buf, usize buflen);
+    bool ansiToWide(const char *cstr, usize cstr_len, wchar_t *buf, usize buflen, usize *outlen = nullptr);
+    bool wideToAnsi(const wchar_t *wstr, usize wstr_len, char *buf, usize buflen, usize *outlen = nullptr);
 } // namespace StrUtils
 
 struct Str {
@@ -144,28 +147,72 @@ struct StrView {
     usize len = 0;
 };
 
+template<usize> struct StaticStr;
+
 template<usize N>
 struct StaticWStr {
     StaticWStr() = default;
     StaticWStr(StrView str) {
-        init(str.buf, str.len);
+        fromAnsi(str.buf, str.len);
+    }
+    StaticWStr(const wchar_t *wstr) {
+        if (wstr) {
+            init(wstr, wcslen(wstr));
+        }
+    }
+    StaticWStr(const wchar_t *wstr, usize wlen) {
+        init(wstr, wlen);
     }
 
-    void init(const char *str, usize new_len) {
-        if (new_len > (N - 1)) {
-            err("initialising StaticStr with length %zu, but maximum is %zu, truncating", new_len, N);
-            new_len = N - 1;
+    static StaticWStr cat(Slice<StaticWStr> strings) {
+        StaticWStr out;
+
+        wchar_t *cur = out.buf;
+        wchar_t *end = out.buf + N;
+
+        for (const StaticWStr &s : strings) {
+            if (cur + s.len >= end) {
+                cur = end - 1;
+                break;
+            }
+            memcpy(cur, s.buf, s.len);
+            cur += s.len;
         }
-        memcpy(buf, str, new_len);
-        buf[new_len] = 0;
-        len = new_len;
+
+        out.len = cur - out.buf;
+        out.buf[out.len] = '\0';
+
+        return out;
+    }
+
+    void fromAnsi(const char *str, usize new_len) {
+        if (!StrUtils::ansiToWide(str, new_len, buf, N, &len)) {
+            err("could not convert ansi to wide");
+        }
+    }
+
+    void init(const wchar_t *wstr, usize wlen) {
+        if (wlen >= len) wlen = len - 1;
+        memcpy(buf, wstr, wlen * sizeof(wchar_t));
+        buf[wlen] = '\0';
+        len = wlen;
     }
 
     bool empty()                         const { return len == 0; }
 
-    const wchar_t *data()        { return buf; }
-    const wchar_t *cwstr() const { return buf; }
-    usize size()           const { return len; }
+    const wchar_t *data()       { return buf; }
+    const wchar_t *cstr() const { return buf; }
+    usize size()          const { return len; }
+
+    StaticStr<N> toStaticStr() const {
+        StaticStr<N> out;
+        if (!StrUtils::wideToAnsi(buf, len, out.buf, N, &out.len)) {
+            err("could not convert wide string to ansi");
+            out.buf[0] = '\0';
+            out.len = 0;
+        }
+        return out;
+    }
 
     wchar_t *begin() { return buf; }
     wchar_t *end()   { return buf + len; }

@@ -21,8 +21,12 @@ using uint   = unsigned int;
 using ulong  = unsigned long;
 
 #ifdef UNICODE
+#define PK_UNICODE 1
+#define PK_TEXT(msg) L##msg
 using TCHAR = wchar_t;
 #else
+#define PK_UNICODE 0
+#define PK_TEXT(msg) msg
 using TCHAR = char;
 #endif
 

@@ -91,6 +91,7 @@
         "set": "cpp",
         "stack": "cpp",
         "unordered_set": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "minicoro.h": "c"
     },
 }
