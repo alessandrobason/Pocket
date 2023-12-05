@@ -13,8 +13,7 @@
 
 extern u32 am__push_texture(Texture &&tex);
 
-
-static Image texture__upload(u32 width, u32 height, VkFormat format, Buffer &&staging_buf) {
+static vkptr<VkImage> texture__upload(u32 width, u32 height, VkFormat format, Buffer &&staging_buf) {
     VkExtent3D image_extent = {
         .width = width,
         .height = height,
@@ -32,99 +31,133 @@ static Image texture__upload(u32 width, u32 height, VkFormat format, Buffer &&st
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     };
+    // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 
-    Image new_image;
+    vkptr<VkImage> new_image;
     VmaAllocationCreateInfo alloc_info = {
         .usage = VMA_MEMORY_USAGE_GPU_ONLY
     };
 
     vmaCreateImage(g_engine->m_allocator, &img_info, &alloc_info, &new_image.buffer, &new_image.alloc, nullptr);
 
-    g_engine->immediateSubmit(
-        [&new_image, &staging_buf, &image_extent]
-        (VkCommandBuffer cmd) {
-            VkImageSubresourceRange range = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            };
+    VkCommandBuffer cmd = g_engine->getTransferCmd();
+    pk_assert(cmd);
 
-            VkImageMemoryBarrier image_barrier = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = 0,
-                .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .image = new_image.buffer,
-                .subresourceRange = range,
-            };
+    VkImageSubresourceRange range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
 
-            vkCmdPipelineBarrier(
-                cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &image_barrier
-            );
+    VkImageMemoryBarrier image_barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = new_image.buffer,
+        .subresourceRange = range,
+    };
 
-            VkBufferImageCopy copy_region = {
-                .imageSubresource = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .layerCount = 1,
-                },
-                .imageExtent = image_extent,
-            };
-
-            vkCmdCopyBufferToImage(
-                cmd,
-                staging_buf.buffer,
-                new_image.buffer,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copy_region
-            );
-
-            image_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            image_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            image_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            image_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-            vkCmdPipelineBarrier(
-                cmd,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &image_barrier
-            );
-        }
+    vkCmdPipelineBarrier(
+        cmd,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &image_barrier
     );
 
-    // engine.m_delete_queue.push(vmaDestroyImage, engine.m_allocator, new_image.image, new_image.allocation);
+    VkBufferImageCopy copy_region = {
+        .imageSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .layerCount = 1,
+        },
+        .imageExtent = image_extent,
+    };
+
+    vkCmdCopyBufferToImage(
+        cmd,
+        staging_buf.buffer,
+        new_image.buffer,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &copy_region
+    );
+
+    // image_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    // image_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    // image_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    // image_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    // vkCmdPipelineBarrier(
+    //     cmd,
+    //     VK_PIPELINE_STAGE_TRANSFER_BIT,
+    //     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    //     0,
+    //     0,
+    //     nullptr,
+    //     0,
+    //     nullptr,
+    //     1,
+    //     &image_barrier
+    // );
+
+    u64 wait_handle = 0;
+
+    info("submitting the command");
+
+    // try submitting the command
+    while (!(wait_handle = g_engine->trySubmitTransferCommand(cmd))) {
+        co::yield();
+    }
+
+    info("waiting for transfer to finish");
+
+    // wait for the transfer queue to be over
+    while (!g_engine->isTransferFinished(wait_handle)) {
+        co::yield();
+    }
+
+    info("uploaded!");
+
     staging_buf.destroy();
 
     return new_image;
 }
     
+static vkptr<VkImageView> texture__make_view(VkImage texture) {
+	VkImageViewCreateInfo view_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = texture,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		},
+	};
+    vkptr<VkImageView> view;
+    vkCreateImageView(g_engine->m_device, &view_info, nullptr, view.getRef());
+    return view;
+}
+
 Handle<Texture> Texture::load(StrView filename) {
-    u32 handle = AssetManager::getNewHandle<Texture>();
-    Handle<Texture> out = handle;
+    Handle<Texture> handle = AssetManager::getNewHandle<Texture>();
     
     g_engine->jobpool.pushJob(
-        [filename, handle] 
+        [filename, handle]
         () {
-            mem::ptr<Texture> texture = (Texture *)pk_calloc(sizeof(Texture), 1);
+            Texture texture;
             
             asio::File file;
             if (!file.init(filename)) {
@@ -139,54 +172,32 @@ Handle<Texture> Texture::load(StrView filename) {
 
             arr<byte> file_data = file.getData();
 
+            int req_comp = STBI_rgb_alpha;
+
             int width, height, comp;
-            byte *data = stbi_load_from_memory(file_data.buf, (int)file_data.len, &width, &height, &comp, STBI_rgb_alpha);
+            byte *data = stbi_load_from_memory(file_data.buf, (int)file_data.len, &width, &height, &comp, req_comp);
 
             if (!data) {
                 err("couldn't load image %.*s: %s", filename.len, filename.buf, stbi_failure_reason());
                 return;
             }
 
-            Buffer staging = g_engine->makeBuffer(width * height * comp, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+            Buffer staging = g_engine->makeBuffer(width * height * req_comp, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
             void *bufdata;
             vmaMapMemory(g_engine->m_allocator, staging.alloc, &bufdata);
-            memcpy(bufdata, data, width * height * comp);
+            memcpy(bufdata, data, width * height * req_comp);
             vmaUnmapMemory(g_engine->m_allocator, staging.alloc);
 
             stbi_image_free(data);
 
-            texture->image = texture__upload(width, height, VK_FORMAT_R8G8B8A8_UNORM, mem::move(staging));
-            // todo: view
+            texture.image = texture__upload(width, height, VK_FORMAT_R8G8B8A8_UNORM, mem::move(staging));
+	        texture.view = texture__make_view(texture.image);
 
             // AssetManager::finishLoading<Texture>(handle, mem::move(texture));
-            AssetManager::finishLoading<Texture>(handle, texture.release());
-        });
+            AssetManager::finishLoading<Texture>(handle, mem::move(texture));
+        }
+    );
 
-    return out;
-
-    // Texture texture;
-    
-    // int width, height, comp;
-    // fs::Path path = fs::getPath(filename);
-    // byte *data = stbi_load(path.cstr(), &width, &height, &comp, STBI_rgb_alpha);
-
-    // if (!data) {
-    //     err("couldn't load image %.*s: %s", filename.len, filename.buf, stbi_failure_reason());
-    //     return 0;
-    // }
-
-    // Buffer staging = g_engine->makeBuffer(width * height * comp, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
-    // void *bufdata;
-    // vmaMapMemory(g_engine->m_allocator, staging.alloc, &bufdata);
-    // memcpy(bufdata, data, width * height * comp);
-    // vmaUnmapMemory(g_engine->m_allocator, staging.alloc);
-
-    // stbi_image_free(data);
-
-    // texture.image = texture__upload(width, height, VK_FORMAT_R8G8B8A8_UNORM, mem::move(staging));
-    // // todo: view
-
-    // return am__push_texture(mem::move(texture));
+    return handle;
 }

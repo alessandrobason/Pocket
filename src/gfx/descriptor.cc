@@ -31,6 +31,8 @@ static VkDescriptorPool desc__create_pool(
 }
 
 void DescriptorAllocator::resetPools() {
+    MtxLock alloc_lock = allocator_mtx;
+
     // reset all used pools
     for (vkptr<VkDescriptorPool> &p : used_pools) {
         vkResetDescriptorPool(device, p, 0);
@@ -42,6 +44,8 @@ void DescriptorAllocator::resetPools() {
 }
 
 bool DescriptorAllocator::allocate(VkDescriptorSet &set, VkDescriptorSetLayout layout) {
+    MtxLock alloc_lock = allocator_mtx;
+    
     if (!current_pool) {
         current_pool = used_pools.push(grabPool());
     }
@@ -127,6 +131,8 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
             }
         );
     }
+
+    MtxLock cache_lock = cache_mtx;
 
     if (vkptr<VkDescriptorSetLayout> *it = layout_cache.get(layout_info)) {
         return it->value;

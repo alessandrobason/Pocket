@@ -33,7 +33,6 @@ struct Callable<T, TRet(TArgs...)> : CallableBase<TRet(TArgs...)> {
 
     Callable() = default;
     Callable(T &&storage) : storage(mem::move(storage)) {}
-    // Callable(T &&storage) { init(mem::move(storage)); }
 
     void init(T &&store) {
         storage = mem::move(store);

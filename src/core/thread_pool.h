@@ -19,6 +19,9 @@ struct ThreadPool {
 	void pushJob(Job &&job);
     void setMaxJobsPerThread(uint max_jobs);
 
+    usize getNumOfThreads() const;
+    usize getThreadIndex(uptr thread_id) const;
+
 private:
     struct JobData {
         Job job;

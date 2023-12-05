@@ -34,23 +34,6 @@ int main(int argc, char* argv[]) {
 
 	fs::setBaseFolder(asset_folder);
 
-	auto start_total = timer::now();
-	
-	auto start_asio = timer::now();
-	asio::File file = asio::File("test.bin");
-	auto end_asio = timer::now();
-	
-	while (!file.poll()) {
-		info("polling...");
-	}
-
-	auto end_total = timer::now();
-
-	info("asio time:  %zu", ms(end_asio - start_asio));
-	info("total time: %zu", ms(end_total - start_total));
-	
-#if 0
-
 	Engine engine;
 	g_engine = &engine;
 
@@ -59,7 +42,6 @@ int main(int argc, char* argv[]) {
 	engine.run();	
 
 	engine.cleanup();
-#endif
 
 	return 0;
 }

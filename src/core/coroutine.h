@@ -34,14 +34,12 @@ namespace co {
         Coro(Coro &&other);
         ~Coro();
 
-        static Coro running();
-
         Result init(Func func, void *userdata = nullptr);
         Result destroy();
 
         Result resume();
         Result yield();
-        Result status();
+        State status();
 
         void *getUserData();
 
@@ -53,24 +51,5 @@ namespace co {
     Result resume();
     Result yield();
     Result status();
+    void *getUserData();
 } // namespace co
-
-/*
-
-void func() {
-    hello
-    world 
-    while (cond) {
-        co::yield();
-    }
-
-    return;
-}
-
-void co_func(mco_coro *co) {
-    Data *data = co->udata;
-    data->func();
-
-}
-
-*/

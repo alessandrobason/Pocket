@@ -1,0 +1,1 @@
+- buffer pool, when creating a pool it floors it to the next pow2. this way when we need to reuse it we can just check the cache

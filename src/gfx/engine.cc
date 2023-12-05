@@ -22,6 +22,8 @@
 #include "camera.h"
 #include "shader.h"
 #include "core/input.h"
+#include "assets/asset_manager.h"
+#include "assets/texture.h"
 #include "formats/ini.h"
 
 #define PK_VKCHECK(x) \
@@ -76,9 +78,6 @@ void Engine::init() {
 	initPipeline();
 
 	AssetManager::loadDefaults();
-	while (jobpool.isBusy()) {
-		//
-	}
 
 	loadImages();
 	initScene();
@@ -128,6 +127,33 @@ void Engine::run() {
 		if (isKeyPressed(Key::Escape)) {
 			should_quit = true;
 		}
+
+		transferUpdate();
+
+#if 0
+
+		if (jobpool.getNumOfThreads() > m_perthread_transfer_buf.len) {
+			MtxLock transfer_lock = transfer_pool_mtx;
+
+			usize new_len = jobpool.getNumOfThreads();
+			usize old_len = m_perthread_transfer_buf.len;
+			usize diff = new_len - old_len;
+
+			info("allocating %zu transfer command buffers", diff);
+
+			VkCommandBufferAllocateInfo cmdalloc_info = {
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+				.commandPool = m_transfer_pool,
+				.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+				.commandBufferCount = diff,
+			};
+			
+			m_perthread_transfer_buf.grow(new_len);
+			VkCommandBuffer *beg = &m_perthread_transfer_buf[old_len];
+
+			PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, beg));
+		}
+#endif
 
 		m_cam.update();
 
@@ -427,9 +453,10 @@ void Engine::initCommandBuffers() {
 	cmdalloc_info.commandPool = m_upload_ctx.pool;
 	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, &m_upload_ctx.buffer));
 
-
+	cmdpool_info.queueFamilyIndex = m_transferqueue_family;
 	PK_VKCHECK(vkCreateCommandPool(m_device, &cmdpool_info, nullptr, m_transfer_pool.getRef()));
 	cmdalloc_info.commandPool = m_transfer_pool;
+	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, &transfer_cmd));
 }
 
 void Engine::initDefaultRenderPass() {
@@ -560,6 +587,8 @@ void Engine::initSyncStructures() {
 
 	fence_info.flags = 0;
 	PK_VKCHECK(vkCreateFence(m_device, &fence_info, nullptr, m_upload_ctx.fence.getRef()));
+
+	PK_VKCHECK(vkCreateFence(m_device, &fence_info, nullptr, transfer_fence.getRef()));
 }
 
 void Engine::initPipeline() {
@@ -714,9 +743,9 @@ void Engine::initScene() {
 
 	Material* textured_mat = getMaterial("texturedmesh");
 
-	textured_mat->texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+	//textured_mat->texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
 	//	.bindImage(0, { blocky_sampler, m_textures.get("empire_diffuse")->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-		.build();
+	//	.build();
 
 	m_sampler_cache.push(mem::move(blocky_sampler));
 }
@@ -822,6 +851,50 @@ void Engine::draw() {
 	};
 
 	PK_VKCHECK(vkBeginCommandBuffer(cmd, &beg_info));
+	
+	int count = 0;
+	// check if materials are ready
+	for (Material &mat : m_materials) {
+		++count;
+		if (!mat.texture_set) {
+			if (Texture *texture = AssetManager::get<Texture>(Handle<Texture>(0))) {
+				info("doing count: %d", count - 1);
+
+				auto &blocky_sampler = m_sampler_cache.back();
+
+				VkImageMemoryBarrier image_barrier = {
+					.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+					.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+					.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					.image = texture->image,
+					.subresourceRange = {
+						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						.levelCount = 1,
+						.layerCount = 1,
+					},
+				};
+				
+				vkCmdPipelineBarrier(
+				    cmd,
+				    VK_PIPELINE_STAGE_TRANSFER_BIT,
+				    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				    0,
+				    0,
+				    nullptr,
+				    0,
+				    nullptr,
+				    1,
+				    &image_barrier
+				);
+
+				mat.texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+					.bindImage(0, { blocky_sampler, texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+					.build();
+			}
+		}
+	}
 	
 	VkClearValue clear_col = {
 		.color = { { 0.2f, 0.3f, 0.4f, 1.f } }
@@ -946,6 +1019,15 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 		const RenderObject &obj = objects[i];
 
 		if (obj.material != last_material) {
+			bool is_material_valid = 
+				obj.material->layout_ref &&
+				obj.material->pipeline_ref &&
+				obj.material->texture_set;
+
+			if (!is_material_valid) {
+				continue;
+			}
+
 			last_material = obj.material;
 			uint32_t uniform_offset = (uint32_t)(padUniformBufferSize(sizeof(SceneData)) * frame_index);
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.material->pipeline_ref);
@@ -1025,6 +1107,119 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 Engine::FrameData &Engine::getCurrentFrame() {
 	return m_frames[m_frame_num % kframe_overlap];
 }
+
+VkCommandBuffer Engine::getTransferCmd() {
+	VkCommandBuffer cmd = nullptr;
+
+	{
+		MtxLock freelist_lock = transf_freelist_mtx;
+		if (!transf_cmd_freelist.empty()) {
+			VkCommandBuffer cmd = transf_cmd_freelist.back();
+			transf_cmd_freelist.pop();
+		}
+	}
+	
+	if (!cmd) {
+		cmd = allocateTransferCommandBuf();
+	}
+
+	VkCommandBufferInheritanceInfo inheritance_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+	};
+
+	VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		.pInheritanceInfo = &inheritance_info,
+	};
+
+	vkBeginCommandBuffer(cmd, &begin_info);
+
+	return cmd;
+}
+
+u64 Engine::trySubmitTransferCommand(VkCommandBuffer cmd) {
+	if (has_submitted) return 0;
+
+	vkEndCommandBuffer(cmd);
+	
+	transf_submit_mtx.lock();
+	transf_submit.push(cmd);
+	transf_submit_mtx.unlock();
+
+	return cur_fence_gen;
+}
+
+bool Engine::isTransferFinished(u64 generation) {
+	return cur_fence_gen > generation;
+}
+
+void Engine::transferUpdate() {
+	if (has_submitted) {
+		VkResult wait_result = vkWaitForFences(m_device, 1, transfer_fence.getRef(), true, 0);
+		if (wait_result == VK_SUCCESS) {
+			vkResetFences(m_device, 1, transfer_fence.getRef());
+
+			++cur_fence_gen;
+
+			transf_freelist_mtx.lock();
+			while (!transf_submit.empty()) {
+				VkCommandBuffer cmd = transf_submit.back();
+				transf_submit.pop();
+				vkResetCommandBuffer(cmd, 0);
+				transf_cmd_freelist.push(cmd);
+			}
+			transf_freelist_mtx.unlock();
+			
+			has_submitted = false;
+		}
+		else {
+			return;
+		}
+	}
+
+	transf_submit_mtx.lock();
+
+	if (!transf_submit.empty()) {
+		has_submitted = true;
+		info("submitting %zu commands for transfer", transf_submit.len);
+
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		};
+
+		PK_VKCHECK(vkBeginCommandBuffer(transfer_cmd, &begin_info));
+		vkCmdExecuteCommands(transfer_cmd, (u32)transf_submit.len, transf_submit.buf);
+		PK_VKCHECK(vkEndCommandBuffer(transfer_cmd));
+
+		VkSubmitInfo submit = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &transfer_cmd,
+		};
+
+		PK_VKCHECK(vkQueueSubmit(m_transferqueue, 1, &submit, transfer_fence));
+	}
+
+	transf_submit_mtx.unlock();
+}
+
+VkCommandBuffer Engine::allocateTransferCommandBuf() {
+	MtxLock transfer_pool_lock = transfer_pool_mtx;
+
+	VkCommandBufferAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = m_transfer_pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+		.commandBufferCount = 1,
+	};
+	
+	VkCommandBuffer cmd = nullptr;
+	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &alloc_info, &cmd));
+	return cmd;
+}
+
 
 static u32 vulkan_print_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,

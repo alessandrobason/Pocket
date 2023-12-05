@@ -5,6 +5,7 @@
 #include "std/arr.h"
 #include "std/hashmap.h"
 #include "std/pair.h"
+#include "std/threads.h"
 
 #include "vk_ptr.h"
 
@@ -39,6 +40,7 @@ private:
     PoolSizes descriptor_sizes;
     arr<vkptr<VkDescriptorPool>> used_pools;
     arr<vkptr<VkDescriptorPool>> free_pools;
+    Mutex allocator_mtx;
 };
 
 struct DescriptorLayoutCache {
@@ -53,9 +55,9 @@ struct DescriptorLayoutCache {
     };
 
 private:
-    // TODO use actual hashmap
     HashMap<DescriptorLayoutInfo, vkptr<VkDescriptorSetLayout>> layout_cache;
     VkDevice device;
+    Mutex cache_mtx;
 };
 
 u32 hash_impl(const DescriptorLayoutCache::DescriptorLayoutInfo &v);

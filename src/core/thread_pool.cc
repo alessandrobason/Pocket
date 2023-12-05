@@ -75,6 +75,20 @@ void ThreadPool::setMaxJobsPerThread(uint max_jobs) {
     max_jobs_per_thread = max_jobs;
 }
 
+usize ThreadPool::getNumOfThreads() const {
+    return threads.len;
+}
+
+usize ThreadPool::getThreadIndex(uptr thread_id) const {
+    for (usize i = 0; i < threads.len; ++i) {
+        if (threads[i].getId() == thread_id) {
+            return i;
+        }
+    }
+
+    return SIZE_MAX;
+}
+
 void ThreadPool::threadLoop() {
     Job job;
 
@@ -85,13 +99,16 @@ void ThreadPool::threadLoop() {
         }
 
         Queue *queue = getQueue();
-        pk_assert(queue);
+        if (!queue) {
+            continue;
+        }
         JobData *job_data = queue->pop();
         // if quitting
         if (!job_data) {
             break;
         }
-        co::Result result = job_data->coroutine.resume();
+        job_data->coroutine.resume();
+        co::State result = job_data->coroutine.status();
         if (result == co::Dead) {
             queue->finishJob();
         }
@@ -261,8 +278,7 @@ void ThreadPool::Queue::push(Job &&fn) {
     pk_assert(node);
 
     auto coroutine__function = []() {
-        co::Coro coro = co::Coro::running();
-        Node *node = (Node *)coro.getUserData();
+        Node *node = (Node *)co::getUserData();
         node->job_data.job();
     };
 
@@ -332,6 +348,7 @@ void ThreadPool::Queue::finishJob() {
         head = nullptr;
 
         head_mtx.unlock();
+        return;
     }
 
     // otherwise, pop the head and put it in the freelist

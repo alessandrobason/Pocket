@@ -109,11 +109,11 @@ struct HashMap {
 	struct HashIter {
 		HashIter(HashMap &map, usize index) : map(map), cur_index(index) {}
 
-		Value &operator*() { map.values[cur_index]; }
-		Value *operator->() { &map.values[cur_index]; }
+		Value &operator*() { return map.values[cur_index]; }
+		Value *operator->() { return &map.values[cur_index]; }
 
-		const Value &operator*() const { map.values[cur_index]; }
-		const Value *operator->() const { &map.values[cur_index]; }
+		const Value &operator*() const { return map.values[cur_index]; }
+		const Value *operator->() const { return &map.values[cur_index]; }
 
 		HashIter &operator++() {
 			for (++cur_index; cur_index < map.keys.size(); ++cur_index) {

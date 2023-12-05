@@ -2,6 +2,7 @@
 
 // TODO remove this
 #include <functional>
+#include <atomic>
 #include <glm/mat4x4.hpp>
 
 #include "std/arr.h"
@@ -76,6 +77,14 @@ struct Engine {
 
     FrameData &getCurrentFrame();
 
+    VkCommandBuffer getTransferCmd();
+    u64 trySubmitTransferCommand(VkCommandBuffer cmd);
+    bool isTransferFinished(u64 handle);
+
+    void transferUpdate();
+
+    VkCommandBuffer allocateTransferCommandBuf();
+
     // -- types --
     struct FrameData {
         vkptr<VkSemaphore> present_sem;
@@ -139,17 +148,33 @@ struct Engine {
 	VkQueue m_gfxqueue = nullptr;
 	u32 m_gfxqueue_family = 0;
 
+    // TRANSFER STUFF ///////////////////////////////////////////////
+
     VkQueue m_transferqueue = nullptr;
     u32 m_transferqueue_family = 0;
     vkptr<VkCommandPool> m_transfer_pool;
-    VkCommandBuffer m_transfer_buf;
+    // arr<VkCommandBuffer> m_perthread_transfer_buf;
+    VkCommandBuffer transfer_cmd;
+    Mutex transfer_pool_mtx;
+    
+    vkptr<VkFence> transfer_fence;
+
+    arr<VkCommandBuffer> transf_cmd_freelist;
+    arr<VkCommandBuffer> transf_submit;
+    Mutex transf_freelist_mtx;
+    Mutex transf_submit_mtx;
+
+    std::atomic<u64> cur_fence_gen = 1;
+    bool has_submitted = false;
+
+    /////////////////////////////////////////////////////////////////
     
     FrameData m_frames[kframe_overlap];
 
 	vkptr<VkRenderPass> m_render_pass;
 	arr<vkptr<VkFramebuffer>> m_framebuffers;
     
-	Image m_depth_img;
+	vkptr<VkImage> m_depth_img;
 	vkptr<VkImageView> m_depth_view;
 	VkFormat m_depth_format;
 

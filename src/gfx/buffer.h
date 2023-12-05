@@ -7,7 +7,6 @@
 struct Engine;
 
 using Buffer = vkptr<VkBuffer>;
-using Image = vkptr<VkImage>;
 
 // struct Texture {
 // 	Image image;
