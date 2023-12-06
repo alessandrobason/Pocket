@@ -1,7 +1,7 @@
 #pragma once
 
 // TODO remove this
-#include <functional>
+// #include <functional>
 #include <atomic>
 #include <glm/mat4x4.hpp>
 
@@ -10,6 +10,7 @@
 #include "std/slice.h"
 #include "std/hashmap.h"
 #include "std/vec.h"
+#include "std/delegate.h"
 
 #include "core/thread_pool.h"
 
@@ -17,10 +18,9 @@
 
 #include "vk_fwd.h"
 #include "vk_ptr.h"
-#include "buffer.h"
 #include "mesh.h"
 #include "camera.h"
-#include "descriptor.h"
+#include "descriptor_cache.h"
 
 // constants
 constexpr uint kframe_overlap = 2;
@@ -41,7 +41,8 @@ struct Engine {
 
     void run();
 
-    void immediateSubmit(std::function<void(VkCommandBuffer)> &&fun);
+    // void immediateSubmit(std::function<void(VkCommandBuffer)> &&fun);
+    void immediateSubmit(Delegate<void(VkCommandBuffer)> &&fun);
 
     VkShaderModule loadShaderModule(const char *path);
 
@@ -51,7 +52,7 @@ struct Engine {
     Mesh *loadMesh(const char *asset_path, StrView name);
     Mesh *getMesh(StrView name);
 
-    Buffer makeBuffer(usize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
+    // Buffer makeBuffer(usize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage);
 
     usize padUniformBufferSize(usize size) const;
 
@@ -92,9 +93,9 @@ struct Engine {
         vkptr<VkFence> render_fence;
         vkptr<VkCommandPool> cmd_pool;
         VkCommandBuffer cmd_buf;
-        Buffer camera_buf;
+        Handle<Buffer> camera_buf;
         VkDescriptorSet global_descriptor;
-        Buffer object_buf;
+        Handle<Buffer> object_buf;
         VkDescriptorSet object_descriptor;
     };
 
@@ -110,6 +111,7 @@ struct Engine {
         vkptr<VkFence> fence;
         vkptr<VkCommandPool> pool;
         VkCommandBuffer buffer;
+        Mutex mtx;
     };
 
     struct RenderObject {
@@ -123,21 +125,24 @@ struct Engine {
     };
 
     // -- variables --
+    vkptr<VkInstance> m_instance;
+    vkptr<VkDevice> m_device;
+    vkptr<VkSurfaceKHR> m_surface;
+    vkptr<VkSwapchainKHR> m_swapchain;
+    vkptr<VkDebugUtilsMessengerEXT> m_debug_messenger;
+    vkptr<VmaAllocator> m_allocator;
+
     u64 m_frame_num = 0;
     uint m_window_width = 800;
     uint m_window_height = 600;
     SDL_Window *m_window = nullptr;
-    vkptr<VkInstance> m_instance;
-	vkptr<VkDebugUtilsMessengerEXT> m_debug_messenger;
+
 	VkPhysicalDevice m_chosen_gpu;
-	vkptr<VkDevice> m_device;
-	vkptr<VkSurfaceKHR> m_surface;
-    vkptr<VkSwapchainKHR> m_swapchain;
+    VkFwd_PhysicalDeviceProperties m_gpu_properties;
 	VkFormat m_swapchain_img_format;
 	arr<VkImage> m_swapchain_images;
 	arr<vkptr<VkImageView>> m_swapchain_img_views;
-	VkFwd_PhysicalDeviceProperties m_gpu_properties;
-	vkptr<VmaAllocator> m_allocator;
+
 	vkptr<VkDescriptorPool> m_imgui_pool;
 
     ThreadPool jobpool;
@@ -153,7 +158,6 @@ struct Engine {
     VkQueue m_transferqueue = nullptr;
     u32 m_transferqueue_family = 0;
     vkptr<VkCommandPool> m_transfer_pool;
-    // arr<VkCommandBuffer> m_perthread_transfer_buf;
     VkCommandBuffer transfer_cmd;
     Mutex transfer_pool_mtx;
     
@@ -190,10 +194,11 @@ struct Engine {
 	arr<RenderObject> m_drawable;
 	HashMap<StrView, Material> m_materials;
 	HashMap<StrView, Mesh> m_meshes;
+    Material *default_material = nullptr;
 	//HashMap<StrView, Texture> m_textures;
     
 	SceneData m_scene_params;
-	Buffer m_scene_params_buf;
+	Handle<Buffer> m_scene_params_buf;
 
 	UploadContext m_upload_ctx;
 

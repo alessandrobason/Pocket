@@ -51,6 +51,7 @@ VertexInDesc Vertex::getVertexDesc() {
 }
 
 bool Mesh::loadFromObj(const char *fname) {
+#if 0
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
@@ -110,25 +111,7 @@ bool Mesh::loadFromObj(const char *fname) {
 			index_offset += fv;
 		}
 	}
-
-	return true;
-}
-
-bool Mesh::load(const char *fname) {
-	AssetFile file;
-	if (!file.load(fname)) {
-		err("failed to load asset file %s", fname);
-		return false;
-	}
-
-	AssetMesh info = AssetMesh::readInfo(file);
-	static_assert(sizeof(Vertex) == sizeof(AssetMesh::Vertex));
-	
-	verts.resize(info.vbuf_size);
-	indices.resize(info.ibuf_size / info.index_size);
-
-	info.unpack(file.blob, (byte *)verts.data(), (byte *)indices.data());
-
+#endif
 	return true;
 }
 
@@ -140,63 +123,91 @@ bool Mesh::load(const char *fname) {
         } \
     } while (0)
 
-Buffer mesh__upload(Engine &engine, VkBufferUsageFlagBits vert_or_ind, const void *data, usize size) {
-	Buffer outbuf;
-	
-	VkBufferCreateInfo buf_info = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = (u32)size,
-		.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-	};
+void mesh__upload(Handle<Buffer> out, VkBufferUsageFlagBits vert_or_ind, const void *data, usize size) {
+	g_engine->jobpool.pushJob(
+		[out, data, size, vert_or_ind]
+		() {
+			Handle<Buffer> staging_handle = Buffer::make(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+			Buffer *staging_buf = staging_handle.get();
 
-	VmaAllocationCreateInfo alloc_info = {
-		.usage = VMA_MEMORY_USAGE_CPU_ONLY,
-	};
+			void *gpu_data = staging_buf->map();
+			memcpy(gpu_data, data, size);
+			staging_buf->unmap();
 
-	Buffer staging_buffer;
+			Buffer buf;
+			buf.allocate(size, vert_or_ind | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-	PK_VKCHECK(vmaCreateBuffer(
-		engine.m_allocator,
-		&buf_info,
-		&alloc_info,
-		&staging_buffer.buffer,
-		&staging_buffer.alloc,
-		nullptr
-	));
+    		VkCommandBuffer cmd = g_engine->getTransferCmd();
+    		pk_assert(cmd);
 
-	void *gpu_data;
-	vmaMapMemory(engine.m_allocator, staging_buffer.alloc, &gpu_data);
-	memcpy(gpu_data, data, size);
-	vmaUnmapMemory(engine.m_allocator, staging_buffer.alloc);
+			VkBufferCopy copy = { .size = size };
+			vkCmdCopyBuffer(cmd, staging_buf->value, buf.value, 1, &copy);
 
-	buf_info.usage = vert_or_ind | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+			u64 wait_handle = 0;
+			while (!(wait_handle = g_engine->trySubmitTransferCommand(cmd))) {
+				co::yield();
+			}
 
-	PK_VKCHECK(vmaCreateBuffer(
-		engine.m_allocator,
-		&buf_info,
-		&alloc_info,
-		&outbuf.buffer,
-		&outbuf.alloc,
-		nullptr
-	));
+			while (!g_engine->isTransferFinished(wait_handle)) {
+				co::yield();
+			}
 
-	engine.immediateSubmit(
-		[&size, &staging_buffer, &outbuf]
-		(VkCommandBuffer cmd) {
-			VkBufferCopy copy = {
-				.size = size,
-			};
-			vkCmdCopyBuffer(cmd, staging_buffer.buffer, outbuf.buffer, 1, &copy);
+			AssetManager::destroy(staging_handle);
+			AssetManager::finishLoading(out, mem::move(buf));
+
+			info("loaded %s buffer", vert_or_ind == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT ? "vertex" : "index");
 		}
 	);
-
-	// vmaDestroyBuffer(engine.m_allocator, staging_buffer.buffer, staging_buffer.allocation);
-
-	return outbuf;
 }
 
-void Mesh::upload(Engine &engine) {
-	vbuf = mesh__upload(engine, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
-	ibuf = mesh__upload(engine, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());
+bool Mesh::load(const char *fname, StrView name) {
+	Str filename = fname;
+	Str mesh_name = name;
+
+	Handle<Buffer> vrt_buf = Buffer::makeAsync();
+	Handle<Buffer> ind_buf = Buffer::makeAsync();
+
+	vbuf = vrt_buf;
+	ibuf = ind_buf;
+
+	g_engine->jobpool.pushJob(
+		[vrt_buf, ind_buf, name = mem::move(mesh_name), fname = mem::move(filename)]
+		() {
+			AssetFile file;
+			if (!file.load(fname.cstr())) {
+				err("failed to load asset file %s", fname);
+				return;
+			}
+
+			AssetMesh info = AssetMesh::readInfo(file);
+			static_assert(sizeof(Vertex) == sizeof(AssetMesh::Vertex));
+
+			arr<Vertex> verts;
+			arr<u32> indices;
+			
+			verts.grow(info.vbuf_size);
+			indices.grow(info.ibuf_size / info.index_size);
+			
+			if (Mesh *mesh = g_engine->m_meshes.get(name)) {
+				mesh->index_count = (u32)indices.len;
+			}
+
+			info.unpack(file.blob, (byte *)verts.data(), (byte *)indices.data());
+			
+			mesh__upload(vrt_buf, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
+			mesh__upload(ind_buf, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());
+
+			while (!vrt_buf.isLoaded()) co::yield();
+			while (!ind_buf.isLoaded()) co::yield();
+
+			info("finished loading model %s", fname.cstr());
+		}
+	);
+	
+	return true;
 }
+
+// void Mesh::upload() {
+// 	vbuf = mesh__upload(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
+// 	ibuf = mesh__upload(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());
+// }

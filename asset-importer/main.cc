@@ -249,8 +249,9 @@ static void convertMesh(const fs::path &fname) {
     Assimp::Importer importer;
     uint import_flags = 
         aiProcess_JoinIdenticalVertices | aiProcess_Triangulate | aiProcess_ImproveCacheLocality | 
-        aiProcess_RemoveRedundantMaterials | aiProcess_OptimizeMeshes | aiProcess_OptimizeMeshes |
+        aiProcess_RemoveRedundantMaterials | aiProcess_OptimizeMeshes |
         aiProcess_FlipUVs | aiProcess_GenBoundingBoxes;
+        
     const aiScene *scene = importer.ReadFile(fname.string(), import_flags);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {

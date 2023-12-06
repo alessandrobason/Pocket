@@ -4,10 +4,12 @@
 
 #include "std/arr.h"
 #include "std/vec.h"
+#include "std/str.h"
 // #include "utils/glm.h"
 
 #include "vk_fwd.h"
-#include "buffer.h"
+#include "assets/buffer.h"
+#include "assets/descriptor.h"
 
 struct VertexInDesc {
 	arr<VkVertexInputBindingDescription> bindings;
@@ -28,15 +30,12 @@ struct Vertex {
 using Index = u32;
 
 struct Mesh {
-	arr<Vertex> verts;
-	arr<Index> indices;
-	Buffer vbuf;
-	Buffer ibuf;
+	Handle<Buffer> vbuf;
+	Handle<Buffer> ibuf;
+	u32 index_count = 0;
 
 	bool loadFromObj(const char *fname);
-	bool load(const char *fname);
-
-	void upload(Engine &engine);
+	bool load(const char *fname, StrView name);
 
 	struct PushConstants {
 		vec4 data;
@@ -47,5 +46,6 @@ struct Mesh {
 struct Material {
 	VkPipeline pipeline_ref;
 	VkPipelineLayout layout_ref;
-	VkDescriptorSet texture_set = nullptr;
+	// VkDescriptorSet texture_set = nullptr;
+	Handle<Descriptor> texture_desc;
 };

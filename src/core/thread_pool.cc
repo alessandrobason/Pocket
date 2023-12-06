@@ -188,7 +188,10 @@ ThreadPool::JobData *ThreadPool::Queue::pop() {
 
     pk_assert(head);
 
-    return &head->job_data;
+    JobData *job_data = &head->job_data;
+    head_mtx.unlock();
+
+    return job_data;
 
 #if 0
     head_mtx.lock();

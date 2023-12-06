@@ -114,7 +114,7 @@ struct Delegate<TRet(TArgs...)> {
         return *this;
     }
 
-    TRet operator()(TArgs &&...args) {
+    TRet operator()(TArgs ...args) {
         if (flags & IsFunctor) {
             return ((CallableBase<Func> *)functor)->invoke(mem::move(args)...);
         }

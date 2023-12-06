@@ -7,7 +7,7 @@
 #include "std/logging.h"
 
 #include "pipeline_builder.h"
-#include "descriptor.h"
+#include "descriptor_cache.h"
 
 void ShaderCompiler::init(VkDevice in_device) {
     device = in_device;

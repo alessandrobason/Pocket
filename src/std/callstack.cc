@@ -9,21 +9,21 @@
 
 #pragma comment(lib, "DbgHelp")
 
-void stack::init() {
+void CallStack::init() {
     HANDLE process = GetCurrentProcess();
     if (!SymInitialize(process, NULL, TRUE)) {
         err("call to SymInitialize failed: %u", GetLastError());
     }
 }
 
-void stack::cleanup() {
+void CallStack::cleanup() {
     HANDLE process = GetCurrentProcess();
     if (!SymCleanup(process)) {
         err("call to SymCleanup failed: %u", GetLastError());
     }
 }
 
-void stack::print() {
+void CallStack::print() {
     HANDLE process = GetCurrentProcess();
     void *stack[1024] = {};
     WORD frame_count = RtlCaptureStackBackTrace(0, 1024, stack, nullptr);

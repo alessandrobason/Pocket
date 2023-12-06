@@ -22,6 +22,7 @@ extern "C" void vmaDestroyBuffer(VmaAllocator allocator, VkBuffer image, VmaAllo
 typedef u32 VkBufferUsageFlags;
 typedef u32 VkPipelineVertexInputStateCreateFlags;
 typedef u32 VkDebugUtilsMessageTypeFlagsEXT;
+typedef u32 VkShaderStageFlags;
 
 struct VkVertexInputBindingDescription;
 struct VkVertexInputAttributeDescription;

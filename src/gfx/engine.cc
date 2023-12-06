@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <glm/gtx/transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <VkBootstrap.h>
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
@@ -25,6 +26,9 @@
 #include "assets/asset_manager.h"
 #include "assets/texture.h"
 #include "formats/ini.h"
+
+#include <chrono>
+using timer = std::chrono::high_resolution_clock;
 
 #define PK_VKCHECK(x) \
     do { \
@@ -49,7 +53,7 @@ static void setImGuiTheme();
 void Engine::init() {
 	info("Initializing");
 
-	stack::init();
+	CallStack::init();
 	jobpool.start(5);
 
 	// We initialize SDL and create a window with it. 
@@ -74,11 +78,11 @@ void Engine::init() {
 	initDefaultRenderPass();
     initFrameBuffers();
 	initSyncStructures();
-	initDescriptors();
-	initPipeline();
-
+	
 	AssetManager::loadDefaults();
 
+	initDescriptors();
+	initPipeline();
 	loadImages();
 	initScene();
 	initImGui();
@@ -89,13 +93,17 @@ void Engine::cleanup() {
 	info("Cleaning up");
 
     for (FrameData &frame : m_frames) {
-        PK_VKCHECK(vkWaitForFences(m_device, 1, frame.render_fence.getRef(), true, 1000000000));
+        PK_VKCHECK(vkWaitForFences(m_device, 1, frame.render_fence.getRef(), true, 9999999999));
     }
+
+	//PK_VKCHECK(vkQueueWaitIdle(m_transferqueue));
+	//PK_VKCHECK(vkWaitForFences(m_device, 1, transfer_fence.getRef(), true, 9999999999));
 
 	ImGui_ImplVulkan_Shutdown();
 	SDL_DestroyWindow(m_window);
-	
-	stack::cleanup();
+
+	AssetManager::cleanup();
+	CallStack::cleanup();
 	jobpool.stop();
 }
 
@@ -103,9 +111,22 @@ void Engine::run() {
 	SDL_Event e;
 	bool should_quit = false;
 
+	auto time_now = timer::now();
+	auto time_last = time_now;
+	double dt = 0;
+
 	//main loop
 	while (!should_quit) {
 		inputNewFrame();
+
+		time_last = time_now;
+		time_now = timer::now();
+		usize time_diff = std::chrono::duration_cast<std::chrono::microseconds>(time_now - time_last).count();
+		double dt = (double)time_diff / 1000000.0;
+		//time_last = time_now;
+		//time_now = SDL_GetPerformanceCounter();
+		//u64 time_diff = time_now - time_last;
+		//double dt = (double)(time_diff * (1000 * 1000) / (double)SDL_GetPerformanceFrequency());
 
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
@@ -130,49 +151,28 @@ void Engine::run() {
 
 		transferUpdate();
 
-#if 0
-
-		if (jobpool.getNumOfThreads() > m_perthread_transfer_buf.len) {
-			MtxLock transfer_lock = transfer_pool_mtx;
-
-			usize new_len = jobpool.getNumOfThreads();
-			usize old_len = m_perthread_transfer_buf.len;
-			usize diff = new_len - old_len;
-
-			info("allocating %zu transfer command buffers", diff);
-
-			VkCommandBufferAllocateInfo cmdalloc_info = {
-				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-				.commandPool = m_transfer_pool,
-				.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-				.commandBufferCount = diff,
-			};
-			
-			m_perthread_transfer_buf.grow(new_len);
-			VkCommandBuffer *beg = &m_perthread_transfer_buf[old_len];
-
-			PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, beg));
-		}
-#endif
-
 		m_cam.update();
 
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplSDL2_NewFrame(m_window);
 		ImGui::NewFrame();
 
-		ImGui::ShowDemoWindow();
+		//ImGui::ShowDemoWindow();
 
-		ImGui::LabelText("Camera Position", "%.2f %.2f %.2f", m_cam.pos.x, m_cam.pos.y, m_cam.pos.z);
-		ImGui::LabelText("Camera Rotation", "%.2f %.2f", m_cam.pitch, m_cam.yaw);
-		ImGui::LabelText("Mouse Position", "%d %d", getMousePos().x, getMousePos().y);
-		ImGui::LabelText("Mouse Relative", "%d %d", getMouseRel().x, getMouseRel().y);
+		ImGui::Text("Fps: %g", 1.0 / dt);
+
+		//ImGui::LabelText("Camera Position", "%.2f %.2f %.2f", m_cam.pos.x, m_cam.pos.y, m_cam.pos.z);
+		//ImGui::LabelText("Camera Rotation", "%.2f %.2f", m_cam.pitch, m_cam.yaw);
+		//ImGui::LabelText("Mouse Position", "%d %d", getMousePos().x, getMousePos().y);
+		//ImGui::LabelText("Mouse Relative", "%d %d", getMouseRel().x, getMouseRel().y);
 
 		draw();
 	}
 }
 
-void Engine::immediateSubmit(std::function<void(VkCommandBuffer)> &&fun) {
+void Engine::immediateSubmit(Delegate<void(VkCommandBuffer)> &&fun) {
+	MtxLock upload_lock = m_upload_ctx.mtx;
+
 	VkCommandBuffer cmd = m_upload_ctx.buffer;
 
 	VkCommandBufferBeginInfo begin_info = {
@@ -231,38 +231,13 @@ Material *Engine::getMaterial(StrView name) {
 
 Mesh *Engine::loadMesh(const char *asset_path, StrView name) {
 	Mesh mesh;
-	mesh.load(asset_path);
-	mesh.upload(*this);
+	mesh.load(asset_path, name);
+	// mesh.upload();
 	return m_meshes.push(name, mem::move(mesh));
 }
 
 Mesh *Engine::getMesh(StrView name) {
 	return m_meshes.get(name);
-}
-
-Buffer Engine::makeBuffer(usize size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage) {
-    VkBufferCreateInfo buf_info = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = size,
-		.usage = usage
-	};
-
-	VmaAllocationCreateInfo alloc_info = {
-		.usage = memory_usage,
-	};
-
-	Buffer buffer = {};
-
-	PK_VKCHECK(vmaCreateBuffer(
-		m_allocator,
-		&buf_info,
-		&alloc_info,
-		&buffer.buffer,
-		&buffer.alloc,
-		nullptr
-	));
-	
-	return buffer;
 }
 
 usize Engine::padUniformBufferSize(usize size) const {
@@ -275,7 +250,7 @@ void Engine::initGfx() {
 
 	auto inst_ret = builder.
 		set_app_name("Vulkan Application")
-		.request_validation_layers(true)
+		.request_validation_layers(PK_DEBUG)
 		.require_api_version(1, 2, 0)
 		.set_debug_callback(vulkan_print_callback)
 		.build();
@@ -677,7 +652,7 @@ void Engine::initDescriptors() {
 	vkCreateDescriptorPool(m_device, &pool_info, nullptr, m_descriptor_pool.getRef());
 
 	uint64_t scene_buf_size = kframe_overlap * padUniformBufferSize(sizeof(SceneData));
-	m_scene_params_buf = makeBuffer(scene_buf_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	m_scene_params_buf = Buffer::make(scene_buf_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	VkDescriptorSetLayoutBinding texture_bindings = {
 		.binding = 0,
@@ -698,36 +673,50 @@ void Engine::initDescriptors() {
 		FrameData &frame = m_frames[i];
 
 		constexpr int max_objects = 10'000;
-		frame.object_buf = makeBuffer(sizeof(ObjectData) * max_objects, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		frame.object_buf = Buffer::make(sizeof(ObjectData) * max_objects, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-		frame.camera_buf = makeBuffer(
+		frame.camera_buf = Buffer::make(
 			sizeof(GPUCameraData),
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VMA_MEMORY_USAGE_CPU_TO_GPU
 		);
 
+		Buffer *obj_buf = frame.object_buf.get();
+		Buffer *cam_buf = frame.camera_buf.get();
+		Buffer *scene_buf = m_scene_params_buf.get();
+
 		frame.global_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-			.bindBuffer(0, { frame.camera_buf, 0, sizeof(GPUCameraData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
-			.bindBuffer(1, { m_scene_params_buf, 0, sizeof(SceneData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT)
+			.bindBuffer(0, { cam_buf->value, 0, sizeof(GPUCameraData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+			.bindBuffer(1, { scene_buf->value, 0, sizeof(SceneData) }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT)
 			.build(m_global_set_layout);
 
 		frame.object_descriptor = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-			.bindBuffer(0, { frame.object_buf, 0, sizeof(ObjectData) * max_objects }, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+			.bindBuffer(0, { obj_buf->value, 0, sizeof(ObjectData) * max_objects }, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
 			.build(m_object_set_layout);
 	}
 }
 
 void Engine::initScene() {
-    loadMesh("imported/monkey_smooth.mesh", "monkey");
+    // loadMesh("imported/monkey_smooth.mesh", "monkey");
+    loadMesh("guy/soldier.mesh", "guy");
     // loadMesh("imported/lost_empire.mesh", "lost_empire");
     // loadMesh("imported/triangle.mesh", "triangle");
 
     RenderObject map = {
-        .mesh = getMesh("monkey"),
+        .mesh = getMesh("guy"),
         .material = getMaterial("texturedmesh"),
 		.matrix = glm::mat4(1),
     };
-	m_drawable.push(map);
+
+	glm::mat4 rot = glm::toMat4(glm::quat(glm::vec3(math::toRad(-84.f), math::toRad(25.4f), math::toRad(-166.8f))));
+
+	for (int y = 0; y < 10; ++y) {
+		for (int x = 0; x < 10; ++x) {
+			glm::mat4 pos = glm::translate(glm::vec3(x * 50, 0, y * 50));
+			map.matrix = pos * rot;
+			m_drawable.push(map);
+		}
+	}
 
 	VkSamplerCreateInfo sampler_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -741,13 +730,23 @@ void Engine::initScene() {
 	vkptr<VkSampler> blocky_sampler;
 	vkCreateSampler(m_device, &sampler_info, nullptr, blocky_sampler.getRef());
 
-	Material* textured_mat = getMaterial("texturedmesh");
+	Texture *default_texture = AssetManager::get(Handle<Texture>(0));
+	default_material = getMaterial("default");
+	default_material->texture_desc = Descriptor::make(
+		AsyncDescBuilder::begin()
+			.bindImage(0, 0, blocky_sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+	);
 
-	//textured_mat->texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-	//	.bindImage(0, { blocky_sampler, m_textures.get("empire_diffuse")->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-	//	.build();
+	Handle<Texture> lost_empire_tex = Texture::load("guy/bojovnikDiffuseMap.jpg");
+
+	map.material->texture_desc = Descriptor::make(
+		AsyncDescBuilder::begin()
+			.bindImage(0, lost_empire_tex, blocky_sampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+	);
 
 	m_sampler_cache.push(mem::move(blocky_sampler));
+
+	m_cam.pos.z += 5.f;
 }
 
 void Engine::initImGui() {
@@ -852,49 +851,17 @@ void Engine::draw() {
 
 	PK_VKCHECK(vkBeginCommandBuffer(cmd, &beg_info));
 	
-	int count = 0;
-	// check if materials are ready
-	for (Material &mat : m_materials) {
-		++count;
-		if (!mat.texture_set) {
-			if (Texture *texture = AssetManager::get<Texture>(Handle<Texture>(0))) {
-				info("doing count: %d", count - 1);
-
-				auto &blocky_sampler = m_sampler_cache.back();
-
-				VkImageMemoryBarrier image_barrier = {
-					.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-					.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-					.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					.image = texture->image,
-					.subresourceRange = {
-						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-						.levelCount = 1,
-						.layerCount = 1,
-					},
-				};
-				
-				vkCmdPipelineBarrier(
-				    cmd,
-				    VK_PIPELINE_STAGE_TRANSFER_BIT,
-				    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-				    0,
-				    0,
-				    nullptr,
-				    0,
-				    nullptr,
-				    1,
-				    &image_barrier
-				);
-
-				mat.texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-					.bindImage(0, { blocky_sampler, texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-					.build();
-			}
-		}
-	}
+	//// check if materials are ready
+	//for (Material &mat : m_materials) {
+	//	if (!mat.texture_set) {
+	//		if (Texture *texture = AssetManager::get(Handle<Texture>(0))) {
+	//			auto &blocky_sampler = m_sampler_cache.back();
+	//			mat.texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
+	//				.bindImage(0, { blocky_sampler, texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+	//				.build();
+	//		}
+	//	}
+	//}
 	
 	VkClearValue clear_col = {
 		.color = { { 0.2f, 0.3f, 0.4f, 1.f } }
@@ -972,7 +939,7 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 		glm::radians(70.f),
 		(float)(m_window_width) / (float)(m_window_height),
 		0.1f,
-		200.f
+		2000.f
 	);
 	proj[1][1] *= -1;
 
@@ -984,50 +951,48 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 		.viewproj = proj * view,
 	};
 
-	void *gpu_data;
-	vmaMapMemory(m_allocator, frame.camera_buf.alloc, &gpu_data);
-	memcpy(gpu_data, &cam_data, sizeof(cam_data));
-	vmaUnmapMemory(m_allocator, frame.camera_buf.alloc);
-
 	uint64_t frame_index = m_frame_num % kframe_overlap;
 	float framed = m_frame_num / 120.f;
 	m_scene_params.ambient_colour = { sin(framed), 0, cos(framed), 1 };
 
-	void *data;
-	vmaMapMemory(m_allocator, m_scene_params_buf.alloc, &data);
-	
-	uint8_t *scene_data = (uint8_t *)data;
+	Buffer *camera_buf = frame.camera_buf.get();
+	Buffer *object_buf = frame.object_buf.get();
+	Buffer *scene_buf = m_scene_params_buf.get();
+
+	// Camera Buffer ////////////////////////////////
+
+	void *gpu_data = camera_buf->map();
+	memcpy(gpu_data, &cam_data, sizeof(cam_data));
+	camera_buf->unmap();
+
+	// Scene Buffer /////////////////////////////////
+
+	u8 *scene_data = scene_buf->map<u8>();
 	scene_data += padUniformBufferSize(sizeof(SceneData)) * frame_index;
+
 	memcpy(scene_data, &m_scene_params, sizeof(m_scene_params));
+	scene_buf->unmap();
 
-	vmaUnmapMemory(m_allocator, m_scene_params_buf.alloc);
+	// Object Buffer ////////////////////////////////
 
-	void *obj_data;
-	vmaMapMemory(m_allocator, frame.object_buf.alloc, &obj_data);
-
-	ObjectData *gpu_objects = (ObjectData *)obj_data;
+	ObjectData *gpu_objects = object_buf->map<ObjectData>();
 
 	for (usize i = 0; i < objects.len; ++i) {
 		gpu_objects[i].model = objects[i].matrix;
 	}
 
-	vmaUnmapMemory(m_allocator, frame.object_buf.alloc);
+	object_buf->unmap();
 
 	Mesh *last_mesh = nullptr;
 	Material *last_material = nullptr;
 	for (usize i = 0; i < objects.len; ++i) {
 		const RenderObject &obj = objects[i];
 
+		//if (!obj.material->texture_desc.isLoaded()) {
+		//	continue;
+		//}
+
 		if (obj.material != last_material) {
-			bool is_material_valid = 
-				obj.material->layout_ref &&
-				obj.material->pipeline_ref &&
-				obj.material->texture_set;
-
-			if (!is_material_valid) {
-				continue;
-			}
-
 			last_material = obj.material;
 			uint32_t uniform_offset = (uint32_t)(padUniformBufferSize(sizeof(SceneData)) * frame_index);
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.material->pipeline_ref);
@@ -1053,18 +1018,21 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 				nullptr
 			);
 
-			if (obj.material->texture_set != VK_NULL_HANDLE) {
-				vkCmdBindDescriptorSets(
-					cmd,
-					VK_PIPELINE_BIND_POINT_GRAPHICS,
-					obj.material->layout_ref,
-					2,
-					1,
-					&obj.material->texture_set,
-					0,
-					nullptr
-				);
+			Descriptor *texture_desc = obj.material->texture_desc.get();
+			if (!texture_desc) {
+				texture_desc = default_material->texture_desc.get();
 			}
+
+			vkCmdBindDescriptorSets(
+				cmd,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				obj.material->layout_ref,
+				2,
+				1,
+				&texture_desc->set,
+				0,
+				nullptr
+			);
 		}
 
 		//float time_passed = (float)SDL_GetTicks64() / 1000.f;
@@ -1083,23 +1051,27 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 		//);
 
 		if (obj.mesh != last_mesh) {
+			Buffer *vbuf = obj.mesh->vbuf.get();
+			Buffer *ibuf = obj.mesh->ibuf.get();
+			if (!vbuf || !ibuf) continue;
+
 			VkDeviceSize offset = 0;
 			vkCmdBindVertexBuffers(
 				cmd,
 				0, 1,
-				&obj.mesh->vbuf.buffer,
+				&vbuf->value.buffer,
 				&offset
 			);
 			vkCmdBindIndexBuffer(
 				cmd,
-				obj.mesh->ibuf.buffer,
+				ibuf->value.buffer,
 				0,
 				VK_INDEX_TYPE_UINT32
 			);
 			last_mesh = obj.mesh;
 		}
 
-		vkCmdDrawIndexed(cmd, (u32)obj.mesh->indices.size(), 1, 0, 0, (u32)i);
+		vkCmdDrawIndexed(cmd, obj.mesh->index_count, 1, 0, 0, (u32)i);
 		//vkCmdDraw(cmd, (u32)obj.mesh->verts.size(), 1, 0, (u32)i);
 	}
 }

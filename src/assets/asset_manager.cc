@@ -3,98 +3,96 @@
 #include "std/arr.h"
 #include "std/hashset.h"
 
-#include "core/guid.h"
+#include "gfx/engine.h"
 
 #include "asset.h"
 #include "texture.h"
+#include "descriptor.h"
+#include "buffer.h"
 
-static arr<arr<mem::ptr<Asset>>> assets;
-static HashSet<u64> loading_assets;
+// MANAGER ///////////////////////////////////////////////////////////////////////////////////////
 
-static arr<Texture> textures;
-static arr<bool> tex_is_loaded;
+template<typename T>
+struct AssetListManager {
+    T *get(Handle<T> handle) {
+        u32 index = handle.value;
+        if (index >= values.len) return nullptr;
+        if (!is_loaded[index]) return nullptr;
+        return &values[index];
+    }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
+    void destroy(Handle<T> handle) {
+        u32 index = handle.value;
+        if (index >= values.len) return;
+        values[index].~T();
+        is_loaded[index] = false;
+        freelist.push(index);
+    }
+
+    bool isLoaded(Handle<T> handle) {
+        u32 index = handle.value;
+        if (index >= values.len) return false;
+        return is_loaded[index];
+    }
+
+    void startLoading(Handle<T> handle) {
+        u32 index = handle.value;
+        if (index >= values.len) return;
+        is_loaded[index] = false;
+    }
+
+    void finishLoading(Handle<T> handle, T &&asset) {
+        u32 index = handle.value;
+        if (index >= values.len) return;
+        is_loaded[index] = true;
+        values[index] = mem::move(asset);
+    }
+
+    Handle<T> getNewHandle() {
+        if (freelist.empty()) {
+            u32 index = (u32)values.len;
+            is_loaded.push(false);
+            values.push();
+            return index;
+        }
+
+        u32 index = freelist.back();
+        freelist.pop();
+        return index;
+    }
+
+    arr<T> values;
+    arr<u32> freelist;
+    arr<bool> is_loaded;
+};
+
+#define MAKE_MANAGER(type, prefix)                                                                                                           \
+    static AssetListManager<type> prefix##_manager;                                                                                          \
+    type *AssetManager::get(Handle<type> handle)                        { return prefix##_manager.get(handle); }                             \
+    void AssetManager::destroy(Handle<type> handle)                     { return prefix##_manager.destroy(handle); }                         \
+    bool AssetManager::isLoaded(Handle<type> handle)                    { return prefix##_manager.isLoaded(handle); }                        \
+    void AssetManager::startLoading(Handle<type> handle)                { return prefix##_manager.startLoading(handle); }                    \
+    void AssetManager::finishLoading(Handle<type> handle, type &&asset) { return prefix##_manager.finishLoading(handle, mem::move(asset)); } \
+    Handle<type> AssetManager::getNew##type##Handle()                   { return prefix##_manager.getNewHandle(); }
+
+MAKE_MANAGER(Texture, tex);
+MAKE_MANAGER(Descriptor, desc);
+MAKE_MANAGER(Buffer, buf);
+
+// PUBLIC FUNCTIONS //////////////////////////////////////////////////////////////////////////////
 
 void AssetManager::loadDefaults() {
-    Texture::load("lost_empire-RGBA.png");
-    Texture::load("default.png");
-}
+    Handle<Texture> default_texture = Texture::load("default.png");
+    buf_manager.getNewHandle();
 
-template<>
-Texture *AssetManager::get(Handle<Texture> handle) {
-    u32 index = handle.value;
-    if (index >= textures.len) return nullptr;
-    if (!tex_is_loaded[index]) return nullptr;
-    return &textures[index];
-}
-
-template<>
-bool AssetManager::isLoaded(Handle<Texture> handle) {
-    u32 index = handle.value;
-    if (index >= textures.len) return false;
-    return tex_is_loaded[index];
-}
-
-template<>
-void AssetManager::startLoading(Handle<Texture> handle) {
-    u32 index = handle.value;
-    if (index >= textures.len) return;
-    tex_is_loaded[index] = false;
-}
-
-template<>
-void AssetManager::finishLoading(Handle<Texture> handle, Texture &&asset) {
-    u32 index = handle.value;
-    if (index >= textures.len) return;
-    tex_is_loaded[index] = true;
-    textures[index] = mem::move(asset);
-}
-
-template<>
-Handle<Texture> AssetManager::getNewHandle() {
-    u32 index = (u32)textures.len;
-    tex_is_loaded.push(false);
-    textures.push();
-    return index;
-}
-
-#if 0
-Asset *AssetManager::getAsset(u32 type_id, u32 handle) {
-    if (type_id >= assets.len) return nullptr;
-    auto &type_assets = assets[type_id];
-    
-    if (handle >= type_assets.len) return nullptr;
-    return type_assets[handle].get();
-}
-
-bool AssetManager::isAssetLoaded(u32 type_id, u32 handle) {
-    u64 value = ((u64)type_id << 32) | handle;
-    return loading_assets.has(value);
-}
-
-u32 AssetManager::getNewAssetHandle(u32 type_id) {
-    if (type_id >= assets.len) {
-        assets.resize(type_id + 1);
-    }
-
-    return assets[type_id].push();
-}
-
-void AssetManager::startLoadingAsset(u32 type_id, u32 handle) {
-    u64 value = ((u64)type_id << 32) | handle;
-    if (!loading_assets.push(value)) {
-        warn("trying to load asset again, type id: %u, handle: %u", type_id, handle);
+    // wait for the default texture to load
+    while (!default_texture.isLoaded()) {
+        g_engine->transferUpdate();
     }
 }
 
-void AssetManager::finishLoadingAsset(u32 type_id, u32 handle, mem::ptr<Asset> &&asset) {
-    u64 value = ((u64)type_id << 32) | handle;
-    if (!loading_assets.remove(value)) {
-        warn("finished loading asset wasn't loading, type id: %u, handle: %u", type_id, handle);
-    }
-    pk_assert(type_id < assets.len);
-    pk_assert(handle < assets[type_id].len);
-    assets[type_id][handle] = mem::move(asset);
+void AssetManager::cleanup() {
+    tex_manager.values.clear();
+    desc_manager.values.clear();
+    buf_manager.values.clear();
 }
-#endif

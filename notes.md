@@ -16,4 +16,12 @@ Describes the layout of a resoure that will be bound with this descriptor
 ## Write descriptor set
 
 ------------------------------------------
-# Framebuffer 
+
+# Pipeline
+Contains info about shader used, input assembly, viewport, etc
+
+# Pipeline Layout
+Complete set of resources (descriptors) that CAN be accessed by the pipeline
+
+------------------------------------------
+

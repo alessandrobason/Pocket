@@ -77,7 +77,7 @@ namespace trace {
 
         if (level == Level::Fatal) {
             Str message = Str::fmt("Fatal Error: %s", buf);
-            stack::print();
+            CallStack::print();
             trace__msg_box(message.cstr());
             raise(SIGABRT);
         }

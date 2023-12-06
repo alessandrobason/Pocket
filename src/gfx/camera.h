@@ -21,6 +21,6 @@ struct Camera {
     vec3 world_up = vec3(0, 1, 0);
     float yaw = -90.f;
     float pitch = 0.f;
-    float mov_speed = 0.5f;
+    float mov_speed = 5.5f;
     float rot_speed = 5.f;
 };

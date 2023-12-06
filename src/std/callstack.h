@@ -1,7 +1,7 @@
 #pragma once
 
-namespace stack {
+namespace CallStack {
     void init();
     void cleanup();
     void print();
-} // namespace stack
+} // namespace CallStack

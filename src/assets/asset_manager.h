@@ -3,71 +3,63 @@
 #include "std/common.h"
 #include "std/mem.h"
 #include "core/guid.h"
-#include "core/handle.h"
 
-struct Asset;
+template<typename T>
+struct Handle {
+    Handle() = default;
+    Handle(u32 value) : value(value) {}
+
+    bool isLoaded() const;
+    T *get() const;
+
+    operator bool() const { return value != 0; }
+
+    u32 value = 0;
+};
+
 struct Texture;
+struct Descriptor;
+struct Buffer;
 
 namespace AssetManager {
     void loadDefaults();
-
-    template<typename T>
-    T *get(Handle<T> handle) = delete;
-
-    template<typename T>
-    bool isLoaded(Handle<T> handle) = delete;
-
-    template<typename T>
-    void startLoading(Handle<T> handle) = delete;
-
-    template<typename T>
-    void finishLoading(Handle<T> handle, T &&asset) = delete;
-
-    template<typename T>
-    Handle<T> getNewHandle() = delete;
+    void cleanup();
 
     // TEXTURES //////////////////////////////////////////////////////////////////
 
-    extern template Texture *get(Handle<Texture> handle);
-    extern template bool isLoaded(Handle<Texture> handle);
-    extern template void startLoading(Handle<Texture> handle);
-    extern template void finishLoading(Handle<Texture> handle, Texture &&asset);
-    extern template Handle<Texture> getNewHandle();
+    Texture *get(Handle<Texture> handle);
+    void destroy(Handle<Texture> handle);
+    bool isLoaded(Handle<Texture> handle);
+    void startLoading(Handle<Texture> handle);
+    void finishLoading(Handle<Texture> handle, Texture &&asset);
+    Handle<Texture> getNewTextureHandle();
 
-#if 0
-    Asset *getAsset(u32 type_id, u32 handle);
-    bool isAssetLoaded(u32 type_id, u32 handle);
-    u32 getNewAssetHandle(u32 type_id);
-    void startLoadingAsset(u32 type_id, u32 handle);
-    void finishLoadingAsset(u32 type_id, u32 handle, mem::ptr<Asset> &&asset);
+    // DESCRIPTORS ///////////////////////////////////////////////////////////////
 
-    template<typename T>
-    T *get(u32 handle) {
-        return getAsset(guid::type<T>(), handle);
-    }
+    Descriptor *get(Handle<Descriptor> handle);
+    void destroy(Handle<Descriptor> handle);
+    bool isLoaded(Handle<Descriptor> handle);
+    void startLoading(Handle<Descriptor> handle);
+    void finishLoading(Handle<Descriptor> handle, Descriptor &&asset);
+    Handle<Descriptor> getNewDescriptorHandle();
 
-    template<typename T>
-    bool isLoaded(u32 handle) {
-        return isAssetLoaded(guid::type<T>(), handle);
-    }
+    // BUFFERS ///////////////////////////////////////////////////////////////////
 
-    template<typename T>
-    void startLoading(u32 handle) {
-        startLoadingAsset(guid::type<T>(), handle);
-    }
+    Buffer *get(Handle<Buffer> handle);
+    void destroy(Handle<Buffer> handle);
+    bool isLoaded(Handle<Buffer> handle);
+    void startLoading(Handle<Buffer> handle);
+    void finishLoading(Handle<Buffer> handle, Buffer &&asset);
+    Handle<Buffer> getNewBufferHandle();
 
-    template<typename T>
-    void finishLoading(u32 handle, mem::ptr<Asset> &&asset) {
-        finishLoadingAsset(guid::type<T>(), handle, mem::move(asset));
-    }
-
-    template<typename T>
-    u32 getNewHandle(bool start_loading = true) {
-        u32 handle = getNewAssetHandle(guid::type<T>());
-        if (start_loading) {
-            startLoading<T>(handle);
-        }
-        return handle;
-    }
-#endif
 } // namespace AssetManager
+
+template<typename T>
+bool Handle<T>::isLoaded() const {
+    return AssetManager::isLoaded(*this);
+}
+
+template<typename T>
+T *Handle<T>::get() const {
+    return AssetManager::get(*this);
+}

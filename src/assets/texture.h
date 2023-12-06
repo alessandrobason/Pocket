@@ -1,13 +1,11 @@
 #pragma once
 
-#include "std/arr.h"
 #include "std/str.h"
-#include "core/handle.h"
 #include "gfx/vk_ptr.h"
 
-#include "asset.h"
+#include "asset_manager.h"
 
-struct Texture : Asset {
+struct Texture {
     static Handle<Texture> load(StrView filename);
 
     vkptr<VkImage> image;
