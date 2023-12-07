@@ -39,7 +39,7 @@ struct arr {
 	}
 
 	void reserve(usize new_cap) {
-		if (cap < new_cap) {
+		if (cap <= new_cap) {
 			reallocate(math::max(cap * 2, new_cap));
 		}
 	}

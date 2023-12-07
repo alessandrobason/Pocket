@@ -126,6 +126,9 @@ void Mutex::init() {
     if (crit_sect) {
         InitializeCriticalSection(crit_sect);
     }
+    else {
+        fatal("crit_sect is null");
+    }
     handle = (uptr)crit_sect;
 }
 
@@ -141,18 +144,18 @@ bool Mutex::isValid() const {
 }
 
 bool Mutex::lock() {
-    if (!isValid()) return false;
-    EnterCriticalSection((CRITICAL_SECTION *)handle);
+     if (!isValid()) { warn("mutex::lock: mutex is not valid"); return false; }
+     EnterCriticalSection((CRITICAL_SECTION *)handle);
     return true;
 }
 
 bool Mutex::tryLock() {
-    if (!isValid()) return false;
+    if (!isValid()) { warn("mutex::tryLock: mutex is not valid"); return false; }
     return TryEnterCriticalSection((CRITICAL_SECTION *)handle);
 }
 
 bool Mutex::unlock() {
-    if (!isValid()) return false;
+    if (!isValid()) { warn("mutex::unlock: mutex is not valid"); return false; }
     LeaveCriticalSection((CRITICAL_SECTION *)handle);
     return true;
 }
@@ -162,24 +165,6 @@ Mutex &Mutex::operator=(Mutex &&m) {
         mem::swap(handle, m.handle);
     }
     return *this;
-}
-
-// MUTEXE LOCKS ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-MtxLock::MtxLock(Mutex &in_mutex) 
-    : mutex(&in_mutex)
-{
-    mutex->lock();
-}
-
-MtxLock::~MtxLock() {
-    unlock();
-}
-
-void MtxLock::unlock() {
-    if (!mutex) return;
-    mutex->unlock();
-    mutex = nullptr;
 }
 
 // CONDITIONAL VARIABLES //////////////////////////////////////////////////////////////////////////////////////////

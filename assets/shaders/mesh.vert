@@ -31,7 +31,7 @@ layout (std140, set=1, binding=0) readonly buffer ObjectBuffer {
 // } push_constants;
 
 void main() {
-    mat4 transform = camera.view_proj * obj_buf.objects[gl_BaseInstance].model;
+    mat4 transform = camera.view_proj * obj_buf.objects[gl_InstanceIndex].model;
     gl_Position = transform * vec4(pos, 1);
 
     // const vec3 offset = push_constants.data.xyz;

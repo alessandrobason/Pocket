@@ -18,6 +18,7 @@ struct AssetFile {
 
     bool save(const char *path) const;
     bool load(const char *path);
+    bool load(Slice<byte> data);
 };
 
 struct AssetTexture {

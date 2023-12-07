@@ -13,7 +13,6 @@ Handle<Descriptor> Descriptor::make(AsyncDescBuilder &builder) {
         [handle, builder]
         () {
             using Type = AsyncDescBuilder::BindType;
-            err("waiting for bindings");
             // wait for all resources to be ready
             for (const AsyncDescBuilder::Binding &bind : builder.bindings) {
                 switch (bind.bind_type) {
@@ -26,8 +25,6 @@ Handle<Descriptor> Descriptor::make(AsyncDescBuilder &builder) {
                     case Type::Buffer:  err("buffer not supported yet"); break;
                 }
             }
-
-            err("finished waiting");
 
             DescriptorBuilder desc_builder = DescriptorBuilder::begin(g_engine->m_desc_cache, g_engine->m_desc_alloc);
         

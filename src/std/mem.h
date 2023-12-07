@@ -32,7 +32,8 @@ namespace mem {
 
 	template<typename T>
 	void swap(T &a, T &b) {
-		RemArrT<T> temp = mem::move(a);
+		// RemArrT<T> temp = mem::move(a);
+		T temp = mem::move(a);
 		a = mem::move(b);
 		b = mem::move(temp);
 	}

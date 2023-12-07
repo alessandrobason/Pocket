@@ -87,7 +87,10 @@ namespace asio {
 
         handle = (uptr)fp;
 
-        info("Last error (should be %u) = %u", ERROR_IO_PENDING, GetLastError());
+        if (GetLastError() != ERROR_IO_PENDING) {
+            err("asio::File::init: GetLastError() should be %u, it's %u instead", ERROR_IO_PENDING, GetLastError());
+            return false;
+        }
 
         return true;
     }

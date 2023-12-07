@@ -4,7 +4,7 @@ project("pocket")
 
 string(REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}") 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}\n") 
-#add_compile_options(-fsanitize=address) 
+# add_compile_options(-fsanitize=address) 
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -25,6 +25,7 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
   "${PROJECT_SOURCE_DIR}/assets/shaders/*.frag"
   "${PROJECT_SOURCE_DIR}/assets/shaders/*.vert"
   "${PROJECT_SOURCE_DIR}/assets/shaders/*.comp"
+  "${PROJECT_SOURCE_DIR}/assets/shaders/*.mesh"
 )
 
 ## iterate each shader

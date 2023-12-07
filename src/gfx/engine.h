@@ -14,7 +14,7 @@
 
 #include "core/thread_pool.h"
 
-// #include "utils/glm.h"
+#include "utils/tracy_helper.h"
 
 #include "vk_fwd.h"
 #include "vk_ptr.h"
@@ -75,18 +75,51 @@ struct Engine {
 
     void draw();
     void drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects);
+    void drawFpsWidget();
 
     FrameData &getCurrentFrame();
 
-    VkCommandBuffer getTransferCmd();
-    u64 trySubmitTransferCommand(VkCommandBuffer cmd);
-    bool isTransferFinished(u64 handle);
-
-    void transferUpdate();
-
-    VkCommandBuffer allocateTransferCommandBuf();
-
     // -- types --
+
+    struct AsyncQueue {
+        void init(VkQueue in_queue, u32 in_family, bool use_fence = false);
+        VkCommandBuffer getCmd();
+        u64 trySubmitCmd(VkCommandBuffer cmd);
+        bool isFinished(u64 wait_handle);
+        void waitUntilFinished(VkCommandBuffer cmd);
+
+        void update(VkCommandBuffer cmd);
+        void updateWithFence();
+
+        VkCommandBuffer allocCmd();
+        void resetSubmitList();
+
+        struct PoolData {
+            vkptr<VkCommandPool> pool;
+            uptr thread_id;
+            arr<VkCommandBuffer> freelist;
+        };
+
+        void addPool(uptr thread_id);
+        u32 getPoolIndex();
+
+        VkQueue queue;
+        u32 family;
+        arr<PoolData> pools;
+        Mutex pool_mtx;
+        // vkptr<VkCommandPool> pool;
+        // Mutex freelist_mtx;
+        arr<VkCommandBuffer> submit;
+        arr<u32> submit_data;
+        Mutex submit_mtx;
+        std::atomic<bool> can_submit = true;
+        std::atomic<u64> cur_generation = 1;
+
+        // optional if using own cmdbuf
+        VkCommandBuffer cmdbuf;
+        vkptr<VkFence> fence;
+    };
+
     struct FrameData {
         vkptr<VkSemaphore> present_sem;
         vkptr<VkSemaphore> render_sem;
@@ -97,6 +130,7 @@ struct Engine {
         VkDescriptorSet global_descriptor;
         Handle<Buffer> object_buf;
         VkDescriptorSet object_descriptor;
+        AsyncQueue async_gfx;
     };
 
     struct SceneData {
@@ -132,7 +166,9 @@ struct Engine {
     vkptr<VkDebugUtilsMessengerEXT> m_debug_messenger;
     vkptr<VmaAllocator> m_allocator;
 
-    u64 m_frame_num = 0;
+    double frame_time = 0.0;
+
+    std::atomic<u64> m_frame_num = 0;
     uint m_window_width = 800;
     uint m_window_height = 600;
     SDL_Window *m_window = nullptr;
@@ -150,6 +186,10 @@ struct Engine {
     DescriptorLayoutCache m_desc_cache;
     DescriptorAllocator m_desc_alloc;
 
+    Tracy tracy_helper;
+
+    // GRAPHICS QUEUE ///////////////////////////////////////////////
+
 	VkQueue m_gfxqueue = nullptr;
 	u32 m_gfxqueue_family = 0;
 
@@ -157,19 +197,7 @@ struct Engine {
 
     VkQueue m_transferqueue = nullptr;
     u32 m_transferqueue_family = 0;
-    vkptr<VkCommandPool> m_transfer_pool;
-    VkCommandBuffer transfer_cmd;
-    Mutex transfer_pool_mtx;
-    
-    vkptr<VkFence> transfer_fence;
-
-    arr<VkCommandBuffer> transf_cmd_freelist;
-    arr<VkCommandBuffer> transf_submit;
-    Mutex transf_freelist_mtx;
-    Mutex transf_submit_mtx;
-
-    std::atomic<u64> cur_fence_gen = 1;
-    bool has_submitted = false;
+    AsyncQueue async_transfer;
 
     /////////////////////////////////////////////////////////////////
     

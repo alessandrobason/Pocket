@@ -50,15 +50,6 @@ struct Mutex {
     uptr handle = 0;
 };
 
-struct MtxLock {
-    MtxLock(Mutex &mutex);
-    ~MtxLock();
-
-    void unlock();
-
-    Mutex *mutex;
-};
-
 struct CondVar {
     CondVar();
 

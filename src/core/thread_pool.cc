@@ -89,14 +89,18 @@ usize ThreadPool::getThreadIndex(uptr thread_id) const {
     return SIZE_MAX;
 }
 
+const arr<Thread> &ThreadPool::getThreads() const {
+    return threads;
+}
+
 void ThreadPool::threadLoop() {
     Job job;
 
     while (true) {
-        {
-            MtxLock stop_lock = stop_mtx;
-            if (should_stop) return;
-        }
+        stop_mtx.lock();
+        bool is_stopping = should_stop;
+        stop_mtx.unlock();
+        if (is_stopping) return;
 
         Queue *queue = getQueue();
         if (!queue) {
@@ -149,14 +153,18 @@ void ThreadPool::pushThread() {
 ThreadPool::Queue *ThreadPool::getQueue() {
     uptr id = Thread::currentId();
 
-    MtxLock lock = queue_mtx;
+    Queue *queue = nullptr;
+
+    queue_mtx.lock();
     for (usize i = 0; i < threads.len; ++i) {
         if (threads[i].getId() == id) {
-            return thread_queues[i];
+            queue = thread_queues[i];
+            break;
         }
     }
+    queue_mtx.unlock();
 
-    return nullptr;
+    return queue;
 }
 
 void ThreadPool::Queue::init(void *in_wait_handle, void *in_stop_handle) {
@@ -192,67 +200,6 @@ ThreadPool::JobData *ThreadPool::Queue::pop() {
     head_mtx.unlock();
 
     return job_data;
-
-#if 0
-    head_mtx.lock();
-
-    while (!head) {
-        head_mtx.unlock();
-        Slice<HANDLE> handles = { stop_handle, wait_handle };
-        DWORD result = WaitForMultipleObjects((DWORD)handles.len, handles.buf, FALSE, INFINITE);
-        if (result == WAIT_OBJECT_0) {
-            return {};
-        }
-        head_mtx.lock();
-    }
-
-    ResetEvent((HANDLE)wait_handle);
-
-    // remove count
-    {
-        MtxLock count_lock = count_mtx;
-        job_count--;
-    }
-
-    pk_assert(head);
-
-    if (head == tail) {
-        MtxLock tail_lock = tail_mtx;
-        // get value
-        Job fn = mem::move(head->job);
-        // co::Coro coro = mem::move(head->coroutine);
-
-        // clear queue
-        arena_mtx.lock();
-        arena.rewind(0);
-        arena_mtx.unlock();
-
-        tail = nullptr;
-        head = nullptr;
-
-        head_mtx.unlock();
-
-        return { mem::move(fn), co::Coro(nullptr, nullptr) };
-    }
-
-    // get function
-    Job fn = mem::move(head->job);
-    // co::Coro coro = mem::move(head->coroutine);
-
-    // pop head
-    Node *node = head;
-    head = head->next;
-    // we don't need the head anymore
-    head_mtx.unlock();
-
-    // save old head in freelist
-    {
-        MtxLock freelock = free_mtx;
-        node->next = freelist;
-        freelist = node;
-    }
-    return { mem::move(fn), co::Coro(nullptr, nullptr) };
-#endif
 }
 
 void ThreadPool::Queue::push(Job &&fn) {
@@ -289,59 +236,64 @@ void ThreadPool::Queue::push(Job &&fn) {
     node->job_data.coroutine.init(coroutine__function, node);
 
     // append to the end
-    MtxLock lock = tail_mtx;
+    tail_mtx.lock();
     if (tail) {
         tail->next = node;
         tail = node;
     }
     // if there are no nodes, make this the head too
     else {
-        MtxLock head_lock = head_mtx;
+        head_mtx.lock();
         head = tail = node;
+        head_mtx.unlock();
     }
+    tail_mtx.unlock();
 
     // add count
-    MtxLock count_lock = count_mtx;
+    count_mtx.lock();
     job_count++;
     if (job_count == 1) {
         SetEvent((HANDLE)wait_handle);
     }
+    count_mtx.unlock();
 }
 
 void ThreadPool::Queue::yieldJob() {
+    tail_mtx.lock();
+    head_mtx.lock();
+
     pk_assert(head && tail);
 
     // job is yielded but not finished, but at the end of the queue
 
     // append to the end
     if (head != tail) {
-        MtxLock tail_lock = tail_mtx;
-        MtxLock head_lock = head_mtx;
-
         tail->next = head;
         tail = head;
 
         head = head->next;
     }
+
+    head_mtx.unlock();
+    tail_mtx.unlock();
 }
 
 void ThreadPool::Queue::finishJob() {
     pk_assert(head);
 
     // remove count
-    {
-        MtxLock count_lock = count_mtx;
-        job_count--;
-    }
+    count_mtx.lock();
+    job_count--;
+    count_mtx.unlock();
 
     // TODO: use arena allocator for these too
     head->job_data.job.destroy();
     head->job_data.coroutine.destroy();
 
+    head_mtx.lock();
+    tail_mtx.lock();
     // if head is tail, clear the whole queue and reset the allocator
     if (head == tail) {
-        MtxLock tail_lock = tail_mtx;
-
         // clear queue
         arena_mtx.lock();
         arena.rewind(0);
@@ -351,8 +303,10 @@ void ThreadPool::Queue::finishJob() {
         head = nullptr;
 
         head_mtx.unlock();
+        tail_mtx.unlock();
         return;
     }
+    tail_mtx.unlock();
 
     // otherwise, pop the head and put it in the freelist
 
@@ -363,12 +317,15 @@ void ThreadPool::Queue::finishJob() {
     head_mtx.unlock();
 
     // save old head in freelist
-    MtxLock freelock = free_mtx;
+    free_mtx.lock();
     old_head->next = freelist;
     freelist = old_head;
+    free_mtx.unlock();
 }
 
 int ThreadPool::Queue::getJobCount() {
-    MtxLock lock = count_mtx;
-    return job_count;
+    count_mtx.lock();
+    int count = job_count;
+    count_mtx.unlock();
+    return count;
 }

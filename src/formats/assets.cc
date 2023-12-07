@@ -11,6 +11,7 @@
 #include "std/file.h"
 #include "std/logging.h"
 #include "std/maths.h"
+#include "std/stream.h"
 
 static StrView std__to_strv(const std::string &str) {
     return StrView(str.data(), str.size());
@@ -56,6 +57,42 @@ bool AssetFile::load(const char *path) {
 
     fp.read(json.data(), json_size);
     fp.read(blob.data(), blob_size);
+
+    return true;
+}
+
+struct InByteStream {
+    InByteStream(Slice<byte> data) : data(data) {}
+
+    void read(void *buf, usize len) {
+        pk_assert(data.len >= len);
+        memcpy(buf, data.buf, len);
+        data.buf += len;
+        data.len -= len;
+    }
+
+    template<typename T>
+    void read(T &value) {
+        read(&value, sizeof(value));
+    }
+
+    Slice<byte> data;
+};
+
+bool AssetFile::load(Slice<byte> data) {
+    InByteStream in = data;
+    in.read(type);
+    in.read(version);
+
+    u32 json_size, blob_size;
+    in.read(json_size);
+    in.read(blob_size);
+
+    json.resize(json_size);
+    blob.resize(blob_size);
+
+    in.read(json.data(), json_size);
+    in.read(blob.data(), blob_size);
 
     return true;
 }

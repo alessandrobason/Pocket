@@ -11,6 +11,9 @@
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyVulkan.hpp>
+
 #include "std/logging.h"
 #include "std/mem.h"
 #include "std/file.h"
@@ -78,15 +81,18 @@ void Engine::init() {
 	initDefaultRenderPass();
     initFrameBuffers();
 	initSyncStructures();
-	
+
+	tracy_helper.init();
+	async_transfer.init(m_transferqueue, m_transferqueue_family, true);
 	AssetManager::loadDefaults();
 
 	initDescriptors();
 	initPipeline();
+
 	loadImages();
 	initScene();
 	initImGui();
-
+	
 }
 
 void Engine::cleanup() {
@@ -95,6 +101,8 @@ void Engine::cleanup() {
     for (FrameData &frame : m_frames) {
         PK_VKCHECK(vkWaitForFences(m_device, 1, frame.render_fence.getRef(), true, 9999999999));
     }
+
+	tracy_helper.cleanup();
 
 	//PK_VKCHECK(vkQueueWaitIdle(m_transferqueue));
 	//PK_VKCHECK(vkWaitForFences(m_device, 1, transfer_fence.getRef(), true, 9999999999));
@@ -113,7 +121,6 @@ void Engine::run() {
 
 	auto time_now = timer::now();
 	auto time_last = time_now;
-	double dt = 0;
 
 	//main loop
 	while (!should_quit) {
@@ -122,11 +129,7 @@ void Engine::run() {
 		time_last = time_now;
 		time_now = timer::now();
 		usize time_diff = std::chrono::duration_cast<std::chrono::microseconds>(time_now - time_last).count();
-		double dt = (double)time_diff / 1000000.0;
-		//time_last = time_now;
-		//time_now = SDL_GetPerformanceCounter();
-		//u64 time_diff = time_now - time_last;
-		//double dt = (double)(time_diff * (1000 * 1000) / (double)SDL_GetPerformanceFrequency());
+		frame_time = (double)time_diff / 1000000.0;
 
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
@@ -149,7 +152,7 @@ void Engine::run() {
 			should_quit = true;
 		}
 
-		transferUpdate();
+		async_transfer.updateWithFence();
 
 		m_cam.update();
 
@@ -157,21 +160,13 @@ void Engine::run() {
 		ImGui_ImplSDL2_NewFrame(m_window);
 		ImGui::NewFrame();
 
-		//ImGui::ShowDemoWindow();
-
-		ImGui::Text("Fps: %g", 1.0 / dt);
-
-		//ImGui::LabelText("Camera Position", "%.2f %.2f %.2f", m_cam.pos.x, m_cam.pos.y, m_cam.pos.z);
-		//ImGui::LabelText("Camera Rotation", "%.2f %.2f", m_cam.pitch, m_cam.yaw);
-		//ImGui::LabelText("Mouse Position", "%d %d", getMousePos().x, getMousePos().y);
-		//ImGui::LabelText("Mouse Relative", "%d %d", getMouseRel().x, getMouseRel().y);
-
+		drawFpsWidget();
 		draw();
 	}
 }
 
 void Engine::immediateSubmit(Delegate<void(VkCommandBuffer)> &&fun) {
-	MtxLock upload_lock = m_upload_ctx.mtx;
+	m_upload_ctx.mtx.lock();
 
 	VkCommandBuffer cmd = m_upload_ctx.buffer;
 
@@ -198,6 +193,8 @@ void Engine::immediateSubmit(Delegate<void(VkCommandBuffer)> &&fun) {
 	vkResetFences(m_device, 1, m_upload_ctx.fence.getRef());
 
 	vkResetCommandPool(m_device, m_upload_ctx.pool, 0);
+
+	m_upload_ctx.mtx.unlock();
 }
 
 VkShaderModule Engine::loadShaderModule(const char *path) {
@@ -253,6 +250,8 @@ void Engine::initGfx() {
 		.request_validation_layers(PK_DEBUG)
 		.require_api_version(1, 2, 0)
 		.set_debug_callback(vulkan_print_callback)
+		//.enable_extension("VK_NV_mesh_shader")
+		//.enable_extension("VK_EXT_mesh_shader")
 		.build();
 
 	vkb::Instance vkb_inst = inst_ret.value();
@@ -266,6 +265,8 @@ void Engine::initGfx() {
 	vkb::PhysicalDevice physical_device = selector
 		.set_minimum_version(1, 1)
 		.set_surface(m_surface)
+		.add_required_extension("VK_NV_mesh_shader")
+		.add_required_extension("VK_EXT_mesh_shader")
 		.select()
 		.value();
 
@@ -274,9 +275,16 @@ void Engine::initGfx() {
 		.shaderDrawParameters = true,
 	};
 
+	VkPhysicalDeviceMeshShaderFeaturesNV mesh_shader_feature = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV,
+		.taskShader = true,
+		.meshShader = true,
+	};
+
 	vkb::DeviceBuilder device_builder{ physical_device };
 	vkb::Device vkb_device = device_builder
 		.add_pNext(&shader_draw_params_feature)
+		.add_pNext(&mesh_shader_feature)
 		.build()
 		.value();
 
@@ -427,11 +435,6 @@ void Engine::initCommandBuffers() {
 
 	cmdalloc_info.commandPool = m_upload_ctx.pool;
 	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, &m_upload_ctx.buffer));
-
-	cmdpool_info.queueFamilyIndex = m_transferqueue_family;
-	PK_VKCHECK(vkCreateCommandPool(m_device, &cmdpool_info, nullptr, m_transfer_pool.getRef()));
-	cmdalloc_info.commandPool = m_transfer_pool;
-	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &cmdalloc_info, &transfer_cmd));
 }
 
 void Engine::initDefaultRenderPass() {
@@ -558,49 +561,35 @@ void Engine::initSyncStructures() {
 
 		PK_VKCHECK(vkCreateSemaphore(m_device, &sem_info, nullptr, frame.present_sem.getRef()));
 		PK_VKCHECK(vkCreateSemaphore(m_device, &sem_info, nullptr, frame.render_sem.getRef()));
+
+		frame.async_gfx.init(m_gfxqueue, m_gfxqueue_family);
 	}
 
 	fence_info.flags = 0;
 	PK_VKCHECK(vkCreateFence(m_device, &fence_info, nullptr, m_upload_ctx.fence.getRef()));
-
-	PK_VKCHECK(vkCreateFence(m_device, &fence_info, nullptr, transfer_fence.getRef()));
 }
 
 void Engine::initPipeline() {
-#if 0
-	vkptr<VkShaderModule> vert = loadShaderModule("shaders/mesh.vert.spv");
-	vkptr<VkShaderModule> frag = loadShaderModule("shaders/triangle.frag.spv");
+	{
+		ShaderCompiler mesh_compiler;
+		mesh_compiler.init(m_device);
+		mesh_compiler.addStage("shaders/spv/mesh-shader.mesh.spv");
+		mesh_compiler.addStage("shaders/spv/mesh-shader.frag.spv");
+		mesh_compiler.build(m_desc_cache);
 
-	if (!vert) err("could not compile vertex shader");
-	else info("compiled vertex shader");
+		PipelineBuilder pipeline_builder;
 
-	if (!frag) err("could not compile fragment shader");
-	else info("compiled fragment shader");
-
-	VkPushConstantRange push_constat = {
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		.offset = 0,
-		.size = sizeof(Mesh::PushConstants),
-	};
-
-	VkDescriptorSetLayout set_layouts[] = {
-		m_global_set_layout,
-		m_object_set_layout,
-		m_single_texture_set_layout,
-	};
-
-	VkPipelineLayoutCreateInfo mesh_pip_layout_info = {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = pk_arrlen(set_layouts),
-		.pSetLayouts = set_layouts,
-		.pushConstantRangeCount = 1,
-		.pPushConstantRanges = &push_constat,
-	};
-
-	vkptr<VkPipelineLayout> pipeline_layout;
-
-	PK_VKCHECK(vkCreatePipelineLayout(m_device, &mesh_pip_layout_info, nullptr, pipeline_layout.getRef()));
-#endif
+		vkptr<VkPipeline> mesh_pip = pipeline_builder
+			.setVertexInput(Vertex::getVertexDesc())
+			.setInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.setRasterizer(VK_CULL_MODE_NONE)
+			.setColourBlend()
+			.setMultisampling(VK_SAMPLE_COUNT_1_BIT)
+			.setDepthStencil(VK_COMPARE_OP_LESS_OR_EQUAL)
+			.pushShaders(mesh_compiler)
+			.setDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR })
+			.build(m_device, m_render_pass);
+	}
 
 	ShaderCompiler shader_compiler;
 	shader_compiler.init(m_device);
@@ -615,7 +604,7 @@ void Engine::initPipeline() {
 		.setInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 		.setViewport(0, 0, (float)m_window_width, (float)m_window_height, 0, 1)
 		.setScissor({ m_window_width, m_window_height })
-		.setRasterizer(VK_CULL_MODE_NONE)
+		.setRasterizer(VK_CULL_MODE_FRONT_BIT)
 		.setColourBlend()
 		.setMultisampling(VK_SAMPLE_COUNT_1_BIT)
 		.setDepthStencil(VK_COMPARE_OP_LESS_OR_EQUAL)
@@ -697,10 +686,10 @@ void Engine::initDescriptors() {
 }
 
 void Engine::initScene() {
-    // loadMesh("imported/monkey_smooth.mesh", "monkey");
+    loadMesh("imported/monkey_smooth.mesh", "monkey");
     loadMesh("guy/soldier.mesh", "guy");
-    // loadMesh("imported/lost_empire.mesh", "lost_empire");
-    // loadMesh("imported/triangle.mesh", "triangle");
+    loadMesh("imported/lost_empire.mesh", "lost_empire");
+    loadMesh("imported/triangle.mesh", "triangle");
 
     RenderObject map = {
         .mesh = getMesh("guy"),
@@ -710,10 +699,10 @@ void Engine::initScene() {
 
 	glm::mat4 rot = glm::toMat4(glm::quat(glm::vec3(math::toRad(-84.f), math::toRad(25.4f), math::toRad(-166.8f))));
 
-	for (int y = 0; y < 10; ++y) {
-		for (int x = 0; x < 10; ++x) {
-			glm::mat4 pos = glm::translate(glm::vec3(x * 50, 0, y * 50));
-			map.matrix = pos * rot;
+	for (int y = 0; y < 5; ++y) {
+		for (int x = 0; x < 5; ++x) {
+			glm::mat4 pos = glm::translate(glm::vec3(x * 50, y * 50, 0));
+			map.matrix = rot * pos;
 			m_drawable.push(map);
 		}
 	}
@@ -839,6 +828,10 @@ void Engine::draw() {
 	
 	PK_VKCHECK(vkResetCommandBuffer(frame.cmd_buf, 0));
 
+	if (!frame.async_gfx.can_submit) {
+		frame.async_gfx.resetSubmitList();
+	}
+
 	u32 sc_img_index = 0;
 	PK_VKCHECK(vkAcquireNextImageKHR(m_device, m_swapchain, 1000000000, frame.present_sem, nullptr, &sc_img_index));
 
@@ -850,19 +843,9 @@ void Engine::draw() {
 	};
 
 	PK_VKCHECK(vkBeginCommandBuffer(cmd, &beg_info));
-	
-	//// check if materials are ready
-	//for (Material &mat : m_materials) {
-	//	if (!mat.texture_set) {
-	//		if (Texture *texture = AssetManager::get(Handle<Texture>(0))) {
-	//			auto &blocky_sampler = m_sampler_cache.back();
-	//			mat.texture_set = DescriptorBuilder::begin(m_desc_cache, m_desc_alloc)
-	//				.bindImage(0, { blocky_sampler, texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-	//				.build();
-	//		}
-	//	}
-	//}
-	
+
+	frame.async_gfx.update(cmd);
+
 	VkClearValue clear_col = {
 		.color = { { 0.2f, 0.3f, 0.4f, 1.f } }
 	};
@@ -934,6 +917,10 @@ void Engine::draw() {
 }
 
 void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
+	if (!AssetManager::areDefaultsLoaded()) {
+		return;
+	}
+
 	glm::mat4 view = m_cam.getView();
 	glm::mat4 proj = glm::perspective(
 		glm::radians(70.f),
@@ -983,215 +970,142 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 
 	object_buf->unmap();
 
+	struct Batch {
+		Mesh *mesh;
+		Material *material;
+		u32 count;
+	};
+
+	arr<Batch> batches;
+
 	Mesh *last_mesh = nullptr;
 	Material *last_material = nullptr;
-	for (usize i = 0; i < objects.len; ++i) {
-		const RenderObject &obj = objects[i];
-
-		//if (!obj.material->texture_desc.isLoaded()) {
-		//	continue;
-		//}
-
+	for (const RenderObject &obj : objects) {
 		if (obj.material != last_material) {
 			last_material = obj.material;
-			uint32_t uniform_offset = (uint32_t)(padUniformBufferSize(sizeof(SceneData)) * frame_index);
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.material->pipeline_ref);
-			vkCmdBindDescriptorSets(
-				cmd,
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				obj.material->layout_ref,
-				0,
-				1,
-				&frame.global_descriptor,
-				1,
-				&uniform_offset
-			);
-
-			vkCmdBindDescriptorSets(
-				cmd,
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				obj.material->layout_ref,
-				1,
-				1,
-				&frame.object_descriptor,
-				0,
-				nullptr
-			);
-
-			Descriptor *texture_desc = obj.material->texture_desc.get();
-			if (!texture_desc) {
-				texture_desc = default_material->texture_desc.get();
-			}
-
-			vkCmdBindDescriptorSets(
-				cmd,
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				obj.material->layout_ref,
-				2,
-				1,
-				&texture_desc->set,
-				0,
-				nullptr
-			);
+			Batch batch;
+			batch.mesh = obj.mesh;
+			batch.material = obj.material;
+			batch.count = 1;
+			batches.push(batch);
 		}
-
-		//float time_passed = (float)SDL_GetTicks64() / 1000.f;
-		//Mesh::PushConstants constants = {
-		//	.data = { 0, 0, 0, time_passed },
-		//	.model = obj.matrix,
-		//};
-
-		//vkCmdPushConstants(
-		//	cmd,
-		//	obj.material->layout_ref,
-		//	VK_SHADER_STAGE_VERTEX_BIT,
-		//	0,
-		//	sizeof(Mesh::PushConstants),
-		//	&constants
-		//);
-
-		if (obj.mesh != last_mesh) {
-			Buffer *vbuf = obj.mesh->vbuf.get();
-			Buffer *ibuf = obj.mesh->ibuf.get();
-			if (!vbuf || !ibuf) continue;
-
-			VkDeviceSize offset = 0;
-			vkCmdBindVertexBuffers(
-				cmd,
-				0, 1,
-				&vbuf->value.buffer,
-				&offset
-			);
-			vkCmdBindIndexBuffer(
-				cmd,
-				ibuf->value.buffer,
-				0,
-				VK_INDEX_TYPE_UINT32
-			);
-			last_mesh = obj.mesh;
+		else {
+			batches.back().count++;
 		}
-
-		vkCmdDrawIndexed(cmd, obj.mesh->index_count, 1, 0, 0, (u32)i);
-		//vkCmdDraw(cmd, (u32)obj.mesh->verts.size(), 1, 0, (u32)i);
 	}
+
+	u32 instance_offset = 0;
+	for (Batch &batch : batches) {
+		// bind material
+		uint32_t uniform_offset = (uint32_t)(padUniformBufferSize(sizeof(SceneData)) * frame_index);
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, batch.material->pipeline_ref);
+		vkCmdBindDescriptorSets(
+			cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			batch.material->layout_ref,
+			0,
+			1,
+			&frame.global_descriptor,
+			1,
+			&uniform_offset
+		);
+
+		vkCmdBindDescriptorSets(
+			cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			batch.material->layout_ref,
+			1,
+			1,
+			&frame.object_descriptor,
+			0,
+			nullptr
+		);
+
+		Descriptor *texture_desc = batch.material->texture_desc.get();
+		if (!texture_desc) {
+			texture_desc = default_material->texture_desc.get();
+		}
+
+		vkCmdBindDescriptorSets(
+			cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			batch.material->layout_ref,
+			2,
+			1,
+			&texture_desc->set,
+			0,
+			nullptr
+		);
+		
+		// bind mesh
+		Buffer *vbuf = batch.mesh->vbuf.get();
+		Buffer *ibuf = batch.mesh->ibuf.get();
+		if (!vbuf || !ibuf) continue;
+
+		VkDeviceSize offset = 0;
+		vkCmdBindVertexBuffers(
+			cmd,
+			0, 1,
+			&vbuf->value.buffer,
+			&offset
+		);
+		vkCmdBindIndexBuffer(
+			cmd,
+			ibuf->value.buffer,
+			0,
+			VK_INDEX_TYPE_UINT32
+		);
+
+		vkCmdDrawIndexed(cmd, batch.mesh->index_count, batch.count, 0, 0, instance_offset);
+		instance_offset += batch.count;
+	}
+}
+
+void Engine::drawFpsWidget() {
+    static int location = 0;
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuiWindowFlags window_flags = 
+		ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize | 
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+	
+    if (location >= 0) {
+        const float PAD = 10.0f;
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 work_pos = viewport->WorkPos; // Use work area to avoid menu-bar/task-bar, if any!
+        ImVec2 work_size = viewport->WorkSize;
+        ImVec2 window_pos, window_pos_pivot;
+        window_pos.x = (location & 1) ? (work_pos.x + work_size.x - PAD) : (work_pos.x + PAD);
+        window_pos.y = (location & 2) ? (work_pos.y + work_size.y - PAD) : (work_pos.y + PAD);
+        window_pos_pivot.x = (location & 1) ? 1.0f : 0.0f;
+        window_pos_pivot.y = (location & 2) ? 1.0f : 0.0f;
+        ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+        ImGui::SetNextWindowViewport(viewport->ID);
+        window_flags |= ImGuiWindowFlags_NoMove;
+    }
+    else if (location == -2) {
+        // Center window
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+    }
+    ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
+    if (ImGui::Begin("Debug", nullptr, window_flags)) {
+		ImGui::Text("Fps: %g", 1.0 / frame_time);
+        if (ImGui::BeginPopupContextWindow()) {
+            if (ImGui::MenuItem("Custom",       NULL, location == -1)) location = -1;
+            if (ImGui::MenuItem("Center",       NULL, location == -2)) location = -2;
+            if (ImGui::MenuItem("Top-left",     NULL, location == 0)) location = 0;
+            if (ImGui::MenuItem("Top-right",    NULL, location == 1)) location = 1;
+            if (ImGui::MenuItem("Bottom-left",  NULL, location == 2)) location = 2;
+            if (ImGui::MenuItem("Bottom-right", NULL, location == 3)) location = 3;
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::End();
 }
 
 Engine::FrameData &Engine::getCurrentFrame() {
 	return m_frames[m_frame_num % kframe_overlap];
 }
-
-VkCommandBuffer Engine::getTransferCmd() {
-	VkCommandBuffer cmd = nullptr;
-
-	{
-		MtxLock freelist_lock = transf_freelist_mtx;
-		if (!transf_cmd_freelist.empty()) {
-			VkCommandBuffer cmd = transf_cmd_freelist.back();
-			transf_cmd_freelist.pop();
-		}
-	}
-	
-	if (!cmd) {
-		cmd = allocateTransferCommandBuf();
-	}
-
-	VkCommandBufferInheritanceInfo inheritance_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
-	};
-
-	VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-		.pInheritanceInfo = &inheritance_info,
-	};
-
-	vkBeginCommandBuffer(cmd, &begin_info);
-
-	return cmd;
-}
-
-u64 Engine::trySubmitTransferCommand(VkCommandBuffer cmd) {
-	if (has_submitted) return 0;
-
-	vkEndCommandBuffer(cmd);
-	
-	transf_submit_mtx.lock();
-	transf_submit.push(cmd);
-	transf_submit_mtx.unlock();
-
-	return cur_fence_gen;
-}
-
-bool Engine::isTransferFinished(u64 generation) {
-	return cur_fence_gen > generation;
-}
-
-void Engine::transferUpdate() {
-	if (has_submitted) {
-		VkResult wait_result = vkWaitForFences(m_device, 1, transfer_fence.getRef(), true, 0);
-		if (wait_result == VK_SUCCESS) {
-			vkResetFences(m_device, 1, transfer_fence.getRef());
-
-			++cur_fence_gen;
-
-			transf_freelist_mtx.lock();
-			while (!transf_submit.empty()) {
-				VkCommandBuffer cmd = transf_submit.back();
-				transf_submit.pop();
-				vkResetCommandBuffer(cmd, 0);
-				transf_cmd_freelist.push(cmd);
-			}
-			transf_freelist_mtx.unlock();
-			
-			has_submitted = false;
-		}
-		else {
-			return;
-		}
-	}
-
-	transf_submit_mtx.lock();
-
-	if (!transf_submit.empty()) {
-		has_submitted = true;
-		info("submitting %zu commands for transfer", transf_submit.len);
-
-		VkCommandBufferBeginInfo begin_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-		};
-
-		PK_VKCHECK(vkBeginCommandBuffer(transfer_cmd, &begin_info));
-		vkCmdExecuteCommands(transfer_cmd, (u32)transf_submit.len, transf_submit.buf);
-		PK_VKCHECK(vkEndCommandBuffer(transfer_cmd));
-
-		VkSubmitInfo submit = {
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &transfer_cmd,
-		};
-
-		PK_VKCHECK(vkQueueSubmit(m_transferqueue, 1, &submit, transfer_fence));
-	}
-
-	transf_submit_mtx.unlock();
-}
-
-VkCommandBuffer Engine::allocateTransferCommandBuf() {
-	MtxLock transfer_pool_lock = transfer_pool_mtx;
-
-	VkCommandBufferAllocateInfo alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = m_transfer_pool,
-		.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-		.commandBufferCount = 1,
-	};
-	
-	VkCommandBuffer cmd = nullptr;
-	PK_VKCHECK(vkAllocateCommandBuffers(m_device, &alloc_info, &cmd));
-	return cmd;
-}
-
 
 static u32 vulkan_print_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
@@ -1285,4 +1199,224 @@ static void setImGuiTheme() {
 	style.Colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
 	style.Colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 	style.GrabRounding                           = style.FrameRounding = 2.3f;
+}
+
+void Engine::AsyncQueue::init(VkQueue in_queue, u32 in_family, bool use_fence) {
+	queue = in_queue;
+	family = in_family;
+
+	const arr<Thread> &threads = g_engine->jobpool.getThreads();
+
+	for (const Thread &thr : threads) {
+		addPool(thr.getId());
+	}
+
+	VkFenceCreateInfo fence_info = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+	};
+
+	PK_VKCHECK(vkCreateFence(g_engine->m_device, &fence_info, nullptr, fence.getRef()));
+}
+
+VkCommandBuffer Engine::AsyncQueue::getCmd() {
+	VkCommandBuffer cmd = nullptr;
+
+	u32 pool_index = getPoolIndex();
+
+	pool_mtx.lock();
+	PoolData &pool = pools[pool_index];
+	if (!pool.freelist.empty()) {
+		VkCommandBuffer cmd = pool.freelist.back();
+		pool.freelist.pop();
+	}
+	pool_mtx.unlock();
+
+	if (!cmd) {
+		cmd = allocCmd();
+	}
+
+	VkCommandBufferInheritanceInfo inheritance_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+	};
+
+	VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		.pInheritanceInfo = &inheritance_info,
+	};
+
+	vkBeginCommandBuffer(cmd, &begin_info);
+
+	return cmd;
+}
+
+u64 Engine::AsyncQueue::trySubmitCmd(VkCommandBuffer cmd) {
+	if (!can_submit) return 0;
+
+	info("cmd: 0x%x", cmd);
+	vkEndCommandBuffer(cmd);
+
+	u32 pool_index = getPoolIndex();
+
+	submit_mtx.lock();
+	submit.push(cmd);
+	submit_data.push(pool_index);
+	submit_mtx.unlock();
+
+	return cur_generation;
+}
+
+bool Engine::AsyncQueue::isFinished(u64 generation) {
+	return cur_generation > generation;
+}
+
+void Engine::AsyncQueue::waitUntilFinished(VkCommandBuffer cmd) {
+	u64 wait_handle = 0;
+	while (!(wait_handle = trySubmitCmd(cmd))) {
+		co::yield();
+	}
+
+	while (!isFinished(wait_handle)) {
+		co::yield();
+	}
+}
+
+void Engine::AsyncQueue::update(VkCommandBuffer cmd) {
+	submit_mtx.lock();
+
+	if (!submit.empty()) {
+		can_submit = false;
+		vkCmdExecuteCommands(cmd, (u32)submit.len, submit.buf);
+	}
+
+	submit_mtx.unlock();
+}
+
+void Engine::AsyncQueue::updateWithFence() {
+	if (!can_submit) {
+		VkResult wait_result = vkWaitForFences(g_engine->m_device, 1, fence.getRef(), true, 0);
+		if (wait_result == VK_SUCCESS) {
+			vkResetFences(g_engine->m_device, 1, fence.getRef());
+			resetSubmitList();
+		}
+		else {
+			return;
+		}
+	}
+
+	submit_mtx.lock();
+
+	if (!submit.empty()) {
+		can_submit = false;
+		info("submitting %zu commands for transfer", submit.len);
+
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		};
+
+		PK_VKCHECK(vkBeginCommandBuffer(cmdbuf, &begin_info));
+		vkCmdExecuteCommands(cmdbuf, (u32)submit.len, submit.buf);
+		PK_VKCHECK(vkEndCommandBuffer(cmdbuf));
+
+		VkSubmitInfo submit = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &cmdbuf,
+		};
+
+		PK_VKCHECK(vkQueueSubmit(queue, 1, &submit, fence));
+	}
+
+	submit_mtx.unlock();
+}
+
+VkCommandBuffer Engine::AsyncQueue::allocCmd() {
+	u32 pool_index = getPoolIndex();
+
+	pool_mtx.lock();
+	VkCommandBufferAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = pools[pool_index].pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+		.commandBufferCount = 1,
+	};
+
+	VkCommandBuffer cmd = nullptr;
+	PK_VKCHECK(vkAllocateCommandBuffers(g_engine->m_device, &alloc_info, &cmd));
+
+	pool_mtx.unlock();
+	return cmd;
+}
+
+void Engine::AsyncQueue::addPool(uptr thread_id) {
+	VkCommandPoolCreateInfo cmdpool_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		// allow pool to reset individual command buffers
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		.queueFamilyIndex = family,
+	};
+
+	VkCommandBufferAllocateInfo cmdalloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1,
+	};
+
+	VkCommandPool new_pool;
+	PK_VKCHECK(vkCreateCommandPool(g_engine->m_device, &cmdpool_info, nullptr, &new_pool));
+
+	PoolData data;
+	data.thread_id = Thread::currentId();
+	data.pool = new_pool;
+
+	pool_mtx.lock();
+	pools.push(mem::move(data));
+	pool_mtx.unlock();
+
+	// TODO could preallocate a few buffers and put them in the freelist
+
+	if (!fence) return;
+
+	pool_mtx.lock();
+	cmdalloc_info.commandPool = new_pool;
+	PK_VKCHECK(vkAllocateCommandBuffers(g_engine->m_device, &cmdalloc_info, &cmdbuf));
+	pool_mtx.unlock();
+}
+
+u32 Engine::AsyncQueue::getPoolIndex() {
+	// try to find the queue
+	uptr thread_id = Thread::currentId();
+
+	pool_mtx.lock();
+	for (usize i = 0; i < pools.len; ++i) {
+		if (pools[i].thread_id == thread_id) {
+			pool_mtx.unlock();
+			return (u32)i;
+		}
+	}
+
+	u32 index = (u32)pools.len;
+	pool_mtx.unlock();
+
+	addPool(thread_id);
+
+	return index;
+}
+
+void Engine::AsyncQueue::resetSubmitList() {
+	++cur_generation;
+
+	pool_mtx.lock();
+	while (!submit.empty()) {
+		VkCommandBuffer cmd = submit.back();
+		u32 pool_index = submit_data.back();
+		submit.pop();
+		submit_data.pop();
+
+		pools[pool_index].freelist.push(cmd);
+	}
+	pool_mtx.unlock();
+
+	can_submit = true;
 }

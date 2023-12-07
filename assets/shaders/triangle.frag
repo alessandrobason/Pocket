@@ -19,7 +19,7 @@ layout (set=0, binding=1) uniform SceneData {
 layout (set=2, binding=0) uniform sampler2D tex_sampler;
 
 void main() {
-    const vec3 light_pos = vec3(10, 20, 10);
+    const vec3 light_pos = vec3(.3, .3, 1);
     const vec3 light_dir = normalize(light_pos - frag_pos);
     const vec3 diffuse = vec3(max(dot(in_normal, light_dir), 0));
     

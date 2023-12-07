@@ -31,7 +31,7 @@ static VkDescriptorPool desc__create_pool(
 }
 
 void DescriptorAllocator::resetPools() {
-    MtxLock alloc_lock = allocator_mtx;
+    allocator_mtx.lock();
 
     // reset all used pools
     for (vkptr<VkDescriptorPool> &p : used_pools) {
@@ -41,10 +41,12 @@ void DescriptorAllocator::resetPools() {
 
     used_pools.clear();
     current_pool = nullptr;
+
+    allocator_mtx.unlock();
 }
 
 bool DescriptorAllocator::allocate(VkDescriptorSet &set, VkDescriptorSetLayout layout) {
-    MtxLock alloc_lock = allocator_mtx;
+    allocator_mtx.lock();
     
     if (!current_pool) {
         current_pool = used_pools.push(grabPool());
@@ -62,12 +64,14 @@ bool DescriptorAllocator::allocate(VkDescriptorSet &set, VkDescriptorSetLayout l
 
     switch (alloc_result) {
         case VK_SUCCESS:
+            allocator_mtx.unlock();
             return true;
         case VK_ERROR_FRAGMENTED_POOL:
         case VK_ERROR_OUT_OF_POOL_MEMORY:
             need_realloc = true;
             break;
         default:
+            allocator_mtx.unlock();
             return false;
     }
 
@@ -75,9 +79,11 @@ bool DescriptorAllocator::allocate(VkDescriptorSet &set, VkDescriptorSetLayout l
         current_pool = used_pools.push(grabPool());
         alloc_result = vkAllocateDescriptorSets(device, &alloc_info, &set);
 
+        allocator_mtx.unlock();
         return alloc_result == VK_SUCCESS;
     }
 
+    allocator_mtx.unlock();
     return false;
 }
 
@@ -132,9 +138,10 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
         );
     }
 
-    MtxLock cache_lock = cache_mtx;
+    cache_mtx.lock();
 
     if (vkptr<VkDescriptorSetLayout> *it = layout_cache.get(layout_info)) {
+        cache_mtx.unlock();
         return it->value;
     }
     else {
@@ -142,6 +149,7 @@ VkDescriptorSetLayout DescriptorLayoutCache::createDescLayout(const VkDescriptor
         vkCreateDescriptorSetLayout(device, &info, nullptr, &layout);
 
         layout_cache.push(layout_info, layout);
+        cache_mtx.unlock();
         return layout; 
     }
 }

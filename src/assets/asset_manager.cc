@@ -14,16 +14,26 @@
 
 template<typename T>
 struct AssetListManager {
+    AssetListManager() {
+        arena = Arena::make(gb(1), Arena::Virtual);
+    }
+
+    void cleanup() {
+        for (u32 i = 0; i < count; ++i) {
+            values[i].~T();
+        }
+    }
+
     T *get(Handle<T> handle) {
         u32 index = handle.value;
-        if (index >= values.len) return nullptr;
+        if (index >= count) return nullptr;
         if (!is_loaded[index]) return nullptr;
         return &values[index];
     }
 
     void destroy(Handle<T> handle) {
         u32 index = handle.value;
-        if (index >= values.len) return;
+        if (index >= count) return;
         values[index].~T();
         is_loaded[index] = false;
         freelist.push(index);
@@ -31,28 +41,31 @@ struct AssetListManager {
 
     bool isLoaded(Handle<T> handle) {
         u32 index = handle.value;
-        if (index >= values.len) return false;
+        if (index >= count) return false;
         return is_loaded[index];
     }
 
     void startLoading(Handle<T> handle) {
         u32 index = handle.value;
-        if (index >= values.len) return;
+        if (index >= count) return;
         is_loaded[index] = false;
     }
 
     void finishLoading(Handle<T> handle, T &&asset) {
         u32 index = handle.value;
-        if (index >= values.len) return;
+        if (index >= count) return;
         is_loaded[index] = true;
         values[index] = mem::move(asset);
     }
 
     Handle<T> getNewHandle() {
         if (freelist.empty()) {
-            u32 index = (u32)values.len;
+            u32 index = (u32)count;
             is_loaded.push(false);
-            values.push();
+            // arena is only used by values, meaning it will be one big list
+            arena.alloc<T>();
+            values = (T *)arena.start;
+            ++count;
             return index;
         }
 
@@ -61,9 +74,11 @@ struct AssetListManager {
         return index;
     }
 
-    arr<T> values;
-    arr<u32> freelist;
+    T *values;
+    u32 count = 0;
     arr<bool> is_loaded;
+    arr<u32> freelist;
+    Arena arena;
 };
 
 #define MAKE_MANAGER(type, prefix)                                                                                                           \
@@ -84,15 +99,18 @@ MAKE_MANAGER(Buffer, buf);
 void AssetManager::loadDefaults() {
     Handle<Texture> default_texture = Texture::load("default.png");
     buf_manager.getNewHandle();
+    //// wait for the default texture to load
+    //while (!default_texture.isLoaded()) {
+    //    g_engine->transferUpdate();
+    //}
+}
 
-    // wait for the default texture to load
-    while (!default_texture.isLoaded()) {
-        g_engine->transferUpdate();
-    }
+bool AssetManager::areDefaultsLoaded() {
+    return tex_manager.isLoaded(0) && desc_manager.isLoaded(0);
 }
 
 void AssetManager::cleanup() {
-    tex_manager.values.clear();
-    desc_manager.values.clear();
-    buf_manager.values.clear();
+    tex_manager.cleanup();
+    desc_manager.cleanup();
+    buf_manager.cleanup();
 }

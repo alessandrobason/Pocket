@@ -11,6 +11,7 @@
 
 #include "std/common.h"
 #include "std/logging.h"
+#include "std/asio.h"
 
 #include "formats/assets.h"
 #include "engine.h"
@@ -51,67 +52,6 @@ VertexInDesc Vertex::getVertexDesc() {
 }
 
 bool Mesh::loadFromObj(const char *fname) {
-#if 0
-	tinyobj::attrib_t attrib;
-	std::vector<tinyobj::shape_t> shapes;
-	std::vector<tinyobj::material_t> materials;
-
-	std::string warn_str, err_str;
-
-	tinyobj::LoadObj(
-		&attrib,
-		&shapes,
-		&materials,
-		&warn_str,
-		&err_str,
-		fname,
-		nullptr
-	);
-
-	if (!warn_str.empty()) {
-		warn("%s", warn_str.c_str());
-	}
-
-	if (!err_str.empty()) {
-		err("%s", err_str.c_str());
-		return false;
-	}
-
-	for (const auto &shape : shapes) {
-		usize index_offset = 0;
-		
-		for (const auto &face : shape.mesh.num_face_vertices) {
-			usize fv = 3;
-
-			for (usize v = 0; v < fv; ++v) {
-				tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
-
-				//copy it into our vertex
-				Vertex new_vert = {
-					.pos = { 
-						attrib.vertices[3 * idx.vertex_index + 0], 
-						attrib.vertices[3 * idx.vertex_index + 1], 
-						attrib.vertices[3 * idx.vertex_index + 2] 
-					},
-					.norm = { 
-						attrib.normals[3 * idx.normal_index + 0], 
-						attrib.normals[3 * idx.normal_index + 1], 
-						attrib.normals[3 * idx.normal_index + 2] 
-					},
-					.col = new_vert.norm,
-					.uv = {
-						attrib.texcoords[2 * idx.texcoord_index + 0],
-						1 - attrib.texcoords[2 * idx.texcoord_index + 1],
-					},
-				};
-
-				verts.push(new_vert);
-			}
-
-			index_offset += fv;
-		}
-	}
-#endif
 	return true;
 }
 
@@ -137,20 +77,14 @@ void mesh__upload(Handle<Buffer> out, VkBufferUsageFlagBits vert_or_ind, const v
 			Buffer buf;
 			buf.allocate(size, vert_or_ind | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-    		VkCommandBuffer cmd = g_engine->getTransferCmd();
+			Engine::AsyncQueue &queue = g_engine->async_transfer;
+    		VkCommandBuffer cmd = queue.getCmd();
     		pk_assert(cmd);
 
 			VkBufferCopy copy = { .size = size };
 			vkCmdCopyBuffer(cmd, staging_buf->value, buf.value, 1, &copy);
 
-			u64 wait_handle = 0;
-			while (!(wait_handle = g_engine->trySubmitTransferCommand(cmd))) {
-				co::yield();
-			}
-
-			while (!g_engine->isTransferFinished(wait_handle)) {
-				co::yield();
-			}
+			queue.waitUntilFinished(cmd);
 
 			AssetManager::destroy(staging_handle);
 			AssetManager::finishLoading(out, mem::move(buf));
@@ -173,13 +107,26 @@ bool Mesh::load(const char *fname, StrView name) {
 	g_engine->jobpool.pushJob(
 		[vrt_buf, ind_buf, name = mem::move(mesh_name), fname = mem::move(filename)]
 		() {
-			AssetFile file;
-			if (!file.load(fname.cstr())) {
+			asio::File file;
+			file.init(fname);
+			if (!file.isValid()) {
 				err("failed to load asset file %s", fname);
 				return;
 			}
 
-			AssetMesh info = AssetMesh::readInfo(file);
+			while (!file.poll()) {
+				co::yield();
+			}
+
+			arr<byte> file_data = file.getData();
+
+			AssetFile asset;
+			if (!asset.load(file_data)) {
+				err("failed to load asset file %s", fname);
+				return;
+			}
+
+			AssetMesh info = AssetMesh::readInfo(asset);
 			static_assert(sizeof(Vertex) == sizeof(AssetMesh::Vertex));
 
 			arr<Vertex> verts;
@@ -192,7 +139,7 @@ bool Mesh::load(const char *fname, StrView name) {
 				mesh->index_count = (u32)indices.len;
 			}
 
-			info.unpack(file.blob, (byte *)verts.data(), (byte *)indices.data());
+			info.unpack(asset.blob, (byte *)verts.data(), (byte *)indices.data());
 			
 			mesh__upload(vrt_buf, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
 			mesh__upload(ind_buf, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());

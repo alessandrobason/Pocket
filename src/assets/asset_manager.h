@@ -23,6 +23,7 @@ struct Buffer;
 
 namespace AssetManager {
     void loadDefaults();
+    bool areDefaultsLoaded();
     void cleanup();
 
     // TEXTURES //////////////////////////////////////////////////////////////////

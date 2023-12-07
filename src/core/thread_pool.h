@@ -21,6 +21,7 @@ struct ThreadPool {
 
     usize getNumOfThreads() const;
     usize getThreadIndex(uptr thread_id) const;
+    const arr<Thread> &getThreads() const;
 
 private:
     struct JobData {

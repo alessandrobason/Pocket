@@ -25,7 +25,7 @@ static vkptr<VkImage> texture__upload(u32 width, u32 height, VkFormat format, Ha
         .imageType = VK_IMAGE_TYPE_2D,
         .format = format,
         .extent = image_extent,
-        .mipLevels = 1,
+        .mipLevels = 3,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -39,8 +39,10 @@ static vkptr<VkImage> texture__upload(u32 width, u32 height, VkFormat format, Ha
     };
 
     vmaCreateImage(g_engine->m_allocator, &img_info, &alloc_info, &new_image.buffer, &new_image.alloc, nullptr);
+    
+    Engine::AsyncQueue &queue = g_engine->async_transfer;
 
-    VkCommandBuffer cmd = g_engine->getTransferCmd();
+    VkCommandBuffer cmd = queue.getCmd();
     pk_assert(cmd);
 
     VkImageSubresourceRange range = {
@@ -118,54 +120,35 @@ static vkptr<VkImage> texture__upload(u32 width, u32 height, VkFormat format, Ha
 
     info("submitting the command");
 
-    // try submitting the command
-    while (!(wait_handle = g_engine->trySubmitTransferCommand(cmd))) {
-        co::yield();
-    }
-
-    info("waiting for transfer to finish");
-
-    // wait for the transfer queue to be over
-    while (!g_engine->isTransferFinished(wait_handle)) {
-        co::yield();
-    }
-
-    info("uploaded!");
+    queue.waitUntilFinished(cmd);
 
     AssetManager::destroy(staging_buf);
 
     // change layout to shader read optimal
 
-    g_engine->immediateSubmit([&new_image](VkCommandBuffer cmd) {
-        VkImageMemoryBarrier image_barrier = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .image = new_image.buffer,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
+    Engine::AsyncQueue &gfx_queue = g_engine->getCurrentFrame().async_gfx;
+    cmd = gfx_queue.getCmd();
+    pk_assert(cmd);
 
-        vkCmdPipelineBarrier(
-            cmd,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &image_barrier
-        );
-    });
+    image_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    image_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    image_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    image_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    vkCmdPipelineBarrier(
+        cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &image_barrier
+    );
+
+    gfx_queue.waitUntilFinished(cmd);
 
     return new_image;
 }
@@ -191,15 +174,16 @@ static vkptr<VkImageView> texture__make_view(VkImage texture) {
 
 Handle<Texture> Texture::load(StrView filename) {
     Handle<Texture> handle = AssetManager::getNewTextureHandle();
+    Str fname = filename;
     
     g_engine->jobpool.pushJob(
-        [filename, handle]
+        [filename = mem::move(fname), handle]
         () {
             Texture texture;
             
             asio::File file;
             if (!file.init(filename)) {
-                err("could not open texture file: %.*s", filename.len, filename.buf);
+                err("could not open texture file: %s", filename.cstr());
                 return;
             }
 
@@ -216,7 +200,7 @@ Handle<Texture> Texture::load(StrView filename) {
             byte *data = stbi_load_from_memory(file_data.buf, (int)file_data.len, &width, &height, &comp, req_comp);
 
             if (!data) {
-                err("couldn't load image %.*s: %s", filename.len, filename.buf, stbi_failure_reason());
+                err("couldn't load image %s: %s", filename.cstr(), stbi_failure_reason());
                 return;
             }
 

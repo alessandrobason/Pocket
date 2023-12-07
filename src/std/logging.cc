@@ -39,7 +39,7 @@ namespace trace {
     }
 
     void printv(Level level, const char *fmt, va_list args) {
-        MtxLock log_lock = log_mtx;
+        log_mtx.lock();
         
         if (!log_arena) {
             puts("No arena provided to the logger, using instead small buffer");
@@ -61,6 +61,7 @@ namespace trace {
         char *buf = scratch.alloc<char>(len + 1, Arena::SoftFail);
         if (!buf) {
             printf("[ERR]: trying to print string of length %d, which is more than what the arena can handle", len + 1);
+            log_mtx.unlock();
             return;
         }
         len = vsnprintf(buf, len + 1, fmt, args);
@@ -81,6 +82,8 @@ namespace trace {
             trace__msg_box(message.cstr());
             raise(SIGABRT);
         }
+
+        log_mtx.unlock();
     }
 } // namespace trace
 
