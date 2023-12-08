@@ -48,8 +48,9 @@ struct AssetMesh {
     struct Vertex {
         float pos[3];
         float norm[3];
-        float col[3];
+        // float col[3];
         float uv[2];
+        u32 col32;
     };
 
     u64 vbuf_size;

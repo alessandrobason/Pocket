@@ -21,8 +21,9 @@ struct VertexInDesc {
 struct Vertex {
 	vec3 pos;
 	vec3 norm;
-	vec3 col;
+	// vec3 col;
 	vec2 uv;
+	u32 col;
 
 	static VertexInDesc getVertexDesc();
 };

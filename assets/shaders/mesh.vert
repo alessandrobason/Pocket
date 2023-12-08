@@ -2,8 +2,8 @@
 
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec3 norm;
-layout (location = 2) in vec3 col;
-layout (location = 3) in vec2 uv;
+layout (location = 2) in vec2 uv;
+layout (location = 3) in vec4 col;
 
 layout (location = 0) out vec3 out_colour;
 layout (location = 1) out vec3 out_normal;
@@ -30,6 +30,14 @@ layout (std140, set=1, binding=0) readonly buffer ObjectBuffer {
 //     mat4 model;
 // } push_constants;
 
+vec3 unpackColour(uint c) {
+    float r = (c >> 24) & 0xff;
+    float g = (c >> 16) & 0xff;
+    float b = (c >> 8) & 0xff;
+
+    return vec3(r, g, b) / 255.0;
+}
+
 void main() {
     mat4 transform = camera.view_proj * obj_buf.objects[gl_InstanceIndex].model;
     gl_Position = transform * vec4(pos, 1);
@@ -43,7 +51,8 @@ void main() {
     // );
 
     // out_colour = vec3(1);
-    out_colour = col;
+    // out_colour = unpackColour(col);
+    out_colour = col.rgb;
     out_normal = norm;
     out_uv = uv;
     frag_pos = vec3(obj_buf.objects[gl_BaseInstance].model * vec4(pos, 1));

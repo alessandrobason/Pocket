@@ -157,8 +157,8 @@ using namespace glm;
 struct Vertex {
 	vec3 pos;
 	vec3 norm;
-	vec3 col;
 	vec2 uv;
+    u32 col;
 };
 
 struct Mesh {
@@ -178,6 +178,15 @@ void addIndices(Slice<aiFace> faces, arr<T> &indices) {
     }
 }
 
+static u32 packColour(const aiColor4D &col) {
+    u8 r = (u8)(col.r * 255.f);
+    u8 g = (u8)(col.g * 255.f);
+    u8 b = (u8)(col.b * 255.f);
+    u8 a = (u8)(col.a * 255.f);
+    u32 packed = ((u32)r << 24) | ((u32)g << 16) | ((u32)b << 8) | ((u32)a);
+    return packed;
+}
+
 static void processMesh(aiMesh *mesh, const aiScene *scene, Mesh &out_mesh) {
     for (uint i = 0; i < mesh->mNumVertices; ++i) {
         const aiVector3D &v = mesh->mVertices[i];
@@ -189,8 +198,8 @@ static void processMesh(aiMesh *mesh, const aiScene *scene, Mesh &out_mesh) {
         out_mesh.verts.push(Vertex{
             .pos = { v.x, v.y, v.z },
             .norm = { n.x, n.y, n.z },
-            .col = { c.r, c.g, c.b },
             .uv = { t.x, t.y },
+            .col = packColour(c),
         });
     }
 

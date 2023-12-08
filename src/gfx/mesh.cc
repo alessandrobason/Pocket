@@ -38,14 +38,14 @@ VertexInDesc Vertex::getVertexDesc() {
 
 	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 2,
-		.format = VK_FORMAT_R32G32B32_SFLOAT,
-		.offset = offsetof(Vertex, col)
+		.format = VK_FORMAT_R32G32_SFLOAT,
+		.offset = offsetof(Vertex, uv)
 	});
 
 	desc.attributes.push(VkVertexInputAttributeDescription{
 		.location = 3,
-		.format = VK_FORMAT_R32G32_SFLOAT,
-		.offset = offsetof(Vertex, uv)
+		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.offset = offsetof(Vertex, col)
 	});
 
 	return desc;

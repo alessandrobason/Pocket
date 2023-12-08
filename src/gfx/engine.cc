@@ -275,16 +275,22 @@ void Engine::initGfx() {
 		.shaderDrawParameters = true,
 	};
 
-	VkPhysicalDeviceMeshShaderFeaturesNV mesh_shader_feature = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV,
+	VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
 		.taskShader = true,
 		.meshShader = true,
 	};
 
+	//VkPhysicalDeviceMeshShaderFeaturesNV mesh_shader_feature = {
+	//	.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV,
+	//	.taskShader = true,
+	//	.meshShader = true,
+	//};
+
 	vkb::DeviceBuilder device_builder{ physical_device };
 	vkb::Device vkb_device = device_builder
 		.add_pNext(&shader_draw_params_feature)
-		.add_pNext(&mesh_shader_feature)
+		.add_pNext(&mesh_shader_features)
 		.build()
 		.value();
 
@@ -293,6 +299,33 @@ void Engine::initGfx() {
     memcpy(&m_gpu_properties, &physical_device.properties, sizeof(m_gpu_properties));
 
     static_assert(sizeof(m_gpu_properties) == sizeof(physical_device.properties), "");
+
+	VkPhysicalDeviceMeshShaderPropertiesNV mesh_shader_properties = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV,
+	};
+
+	VkPhysicalDeviceProperties2 device_properties = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+		.pNext = &mesh_shader_properties,
+	};
+
+	vkGetPhysicalDeviceProperties2(m_chosen_gpu, &device_properties);
+
+	mesh_shader_properties;
+
+    info("maxDrawMeshTasksCount: %u", mesh_shader_properties.maxDrawMeshTasksCount);
+    info("maxTaskWorkGroupInvocations: %u", mesh_shader_properties.maxTaskWorkGroupInvocations);
+    info("maxTaskWorkGroupSize: %u %u %u", mesh_shader_properties.maxTaskWorkGroupSize[0], mesh_shader_properties.maxTaskWorkGroupSize[1], mesh_shader_properties.maxTaskWorkGroupSize[2]);
+    info("maxTaskTotalMemorySize: %u", mesh_shader_properties.maxTaskTotalMemorySize);
+    info("maxTaskOutputCount: %u", mesh_shader_properties.maxTaskOutputCount);
+    info("maxMeshWorkGroupInvocations: %u", mesh_shader_properties.maxMeshWorkGroupInvocations);
+    info("maxMeshWorkGroupSize: %u %u %u", mesh_shader_properties.maxMeshWorkGroupSize[0], mesh_shader_properties.maxMeshWorkGroupSize[1], mesh_shader_properties.maxMeshWorkGroupSize[2]);
+    info("maxMeshTotalMemorySize: %u", mesh_shader_properties.maxMeshTotalMemorySize);
+    info("maxMeshOutputVertices: %u", mesh_shader_properties.maxMeshOutputVertices);
+    info("maxMeshOutputPrimitives: %u", mesh_shader_properties.maxMeshOutputPrimitives);
+    info("maxMeshMultiviewViewCount: %u", mesh_shader_properties.maxMeshMultiviewViewCount);
+    info("meshOutputPerVertexGranularity: %u", mesh_shader_properties.meshOutputPerVertexGranularity);
+    info("meshOutputPerPrimitiveGranularity: %u", mesh_shader_properties.meshOutputPerPrimitiveGranularity);
 
 	m_gfxqueue = vkb_device.get_queue(vkb::QueueType::graphics).value();
 	m_gfxqueue_family = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
@@ -589,6 +622,11 @@ void Engine::initPipeline() {
 			.pushShaders(mesh_compiler)
 			.setDynamicState({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR })
 			.build(m_device, m_render_pass);
+
+		makeMaterial(mesh_pip, mesh_compiler.pipeline_layout, "mesh");
+
+		m_pipeline_cache.push(mem::move(mesh_pip));
+		m_pipeline_layout_cache.push(mem::move(mesh_compiler.pipeline_layout));
 	}
 
 	ShaderCompiler shader_compiler;
