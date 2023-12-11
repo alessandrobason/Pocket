@@ -10,16 +10,16 @@ struct ShaderCompiler;
 
 struct PipelineBuilder {
 	arr<VkPipelineShaderStageCreateInfo> m_shader_stages;
-	VkPipelineVertexInputStateCreateInfo m_vtx_input;
-	VkPipelineInputAssemblyStateCreateInfo m_input_assembly;
+	VkPipelineVertexInputStateCreateInfo m_vtx_input = {};
+	VkPipelineInputAssemblyStateCreateInfo m_input_assembly = {};
 	VkViewport m_viewport;
 	VkRect2D m_scissor;
-	VkPipelineRasterizationStateCreateInfo m_rasterizer;
-	VkPipelineColorBlendAttachmentState m_colour_blend;
-	VkPipelineMultisampleStateCreateInfo m_multisampling;
-	VkPipelineLayout m_layout;
-	VkPipelineDepthStencilStateCreateInfo m_depth_stencil;
-	VkPipelineDynamicStateCreateInfo m_dyn_create_info;
+	VkPipelineRasterizationStateCreateInfo m_rasterizer = {};
+	VkPipelineColorBlendAttachmentState m_colour_blend = {};
+	VkPipelineMultisampleStateCreateInfo m_multisampling = {};
+	VkPipelineLayout m_layout = {};
+	VkPipelineDepthStencilStateCreateInfo m_depth_stencil = {};
+	VkPipelineDynamicStateCreateInfo m_dyn_create_info = {};
 
 	static PipelineBuilder begin();
 	PipelineBuilder &pushShader(VkShaderStageFlagBits stage, VkShaderModule shader, const char *entry = "main");

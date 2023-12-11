@@ -30,13 +30,30 @@ struct Vertex {
 
 using Index = u32;
 
+struct Meshlet {
+	u32 vertices[64];
+	u32 indices[126 * 3];
+	u32 vcount;
+	u32 icount;
+};
+
+struct Mesh2 {
+	Handle<Buffer> vert_buf;
+	Handle<Buffer> local_ind_buf;
+	Handle<Buffer> global_ind_buf;
+	Handle<Buffer> meshlets;
+	u32 meshlets_count = 0;
+
+	void load(StrView fname, StrView name);
+};
+
 struct Mesh {
 	Handle<Buffer> vbuf;
 	Handle<Buffer> ibuf;
 	u32 index_count = 0;
 
 	bool loadFromObj(const char *fname);
-	bool load(const char *fname, StrView name);
+	bool load(const char *fname, StrView name, arr<Meshlet> *gen_meshlets = nullptr);
 
 	struct PushConstants {
 		vec4 data;

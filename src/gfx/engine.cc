@@ -33,6 +33,9 @@
 #include <chrono>
 using timer = std::chrono::high_resolution_clock;
 
+// using PFN_vkCmdDrawMeshTasksEXT = void(VkCommandBuffer, u32, u32, u32);
+PFN_vkCmdDrawMeshTasksEXT fn_vkCmdDrawMeshTasksEXT = nullptr;
+
 #define PK_VKCHECK(x) \
     do { \
         VkResult err = x; \
@@ -258,6 +261,8 @@ void Engine::initGfx() {
 
 	m_instance = vkb_inst.instance;
 	m_debug_messenger = vkb_inst.debug_messenger;
+	fn_vkCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)vkb_inst.fp_vkGetInstanceProcAddr(m_instance, "vkCmdDrawMeshTasksEXT");
+	pk_assert(fn_vkCmdDrawMeshTasksEXT);
 
 	SDL_Vulkan_CreateSurface(m_window, m_instance, m_surface.getRef());
 
@@ -613,7 +618,7 @@ void Engine::initPipeline() {
 		PipelineBuilder pipeline_builder;
 
 		vkptr<VkPipeline> mesh_pip = pipeline_builder
-			.setVertexInput(Vertex::getVertexDesc())
+			// .setVertexInput(Vertex::getVertexDesc())
 			.setInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 			.setRasterizer(VK_CULL_MODE_NONE)
 			.setColourBlend()
@@ -744,6 +749,12 @@ void Engine::initScene() {
 			m_drawable.push(map);
 		}
 	}
+
+	m_drawable.push(RenderObject{
+		.mesh = nullptr,
+		.material = getMaterial("mesh"),
+		.matrix = glm::mat4(1),
+	});
 
 	VkSamplerCreateInfo sampler_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -1008,6 +1019,9 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 
 	object_buf->unmap();
 
+#if 0
+	// Generate Batches /////////////////////////////
+
 	struct Batch {
 		Mesh *mesh;
 		Material *material;
@@ -1096,6 +1110,12 @@ void Engine::drawObjects(VkCommandBuffer cmd, Slice<RenderObject> objects) {
 
 		vkCmdDrawIndexed(cmd, batch.mesh->index_count, batch.count, 0, 0, instance_offset);
 		instance_offset += batch.count;
+	}
+#endif
+
+	if (Material *mat = getMaterial("mesh")) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline_ref);
+		fn_vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
 	}
 }
 

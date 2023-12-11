@@ -94,18 +94,29 @@ void mesh__upload(Handle<Buffer> out, VkBufferUsageFlagBits vert_or_ind, const v
 	);
 }
 
-bool Mesh::load(const char *fname, StrView name) {
+void Mesh2::load(StrView fname, StrView name) {
 	Str filename = fname;
 	Str mesh_name = name;
 
-	Handle<Buffer> vrt_buf = Buffer::makeAsync();
-	Handle<Buffer> ind_buf = Buffer::makeAsync();
+	Handle<Buffer> vbuf  = Buffer::makeAsync();
+	Handle<Buffer> libuf = Buffer::makeAsync();
+	Handle<Buffer> gibuf = Buffer::makeAsync();
+	Handle<Buffer> mbuf  = Buffer::makeAsync();
 
-	vbuf = vrt_buf;
-	ibuf = ind_buf;
+	vert_buf       = vbuf;
+	local_ind_buf  = libuf;
+	global_ind_buf = gibuf;
+	meshlets       = mbuf;
 
 	g_engine->jobpool.pushJob(
-		[vrt_buf, ind_buf, name = mem::move(mesh_name), fname = mem::move(filename)]
+		[
+			vert_buf = vbuf, 
+		 	local_ind_buf = libuf,
+		 	global_ind_buf = gibuf,
+		 	meshlets = mbuf, 
+		 	name = mem::move(mesh_name), 
+		 	fname = mem::move(filename)
+		]
 		() {
 			asio::File file;
 			file.init(fname);
@@ -135,6 +146,76 @@ bool Mesh::load(const char *fname, StrView name) {
 			verts.grow(info.vbuf_size);
 			indices.grow(info.ibuf_size / info.index_size);
 			
+			//if (Mesh *mesh = g_engine->m_meshes.get(name)) {
+			//	mesh->index_count = (u32)indices.len;
+			//}
+
+			info.unpack(asset.blob, (byte *)verts.data(), (byte *)indices.data());
+			
+			//mesh__upload(vrt_buf, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts.data(), verts.byteSize());
+			//mesh__upload(ind_buf, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), indices.byteSize());
+
+			//while (!vrt_buf.isLoaded()) co::yield();
+			//while (!ind_buf.isLoaded()) co::yield();
+
+			//if (gen_meshlets) {
+			//	Meshlet meshlet = {};
+			//	for (u32 index : indices) {
+			//		meshlet.indices[meshlet.icount++] = index;
+			//		meshlet.indices[meshlet.vcount++] = index;
+			//		if (meshlet.icount >= 0 || meshlet.vcount >= 0) {
+			//
+			//		}
+			//		// meshlet[]
+			//	}
+			//}
+
+			info("finished loading model %s", fname.cstr());
+		}
+	);
+}
+
+bool Mesh::load(const char *fname, StrView name, arr<Meshlet> *gen_meshlets) {
+	Str filename = fname;
+	Str mesh_name = name;
+
+	Handle<Buffer> vrt_buf = Buffer::makeAsync();
+	Handle<Buffer> ind_buf = Buffer::makeAsync();
+
+	vbuf = vrt_buf;
+	ibuf = ind_buf;
+
+	g_engine->jobpool.pushJob(
+		[vrt_buf, ind_buf, gen_meshlets, name = mem::move(mesh_name), fname = mem::move(filename)]
+		() {
+			asio::File file;
+			file.init(fname);
+			if (!file.isValid()) {
+				err("failed to load asset file %s", fname);
+				return;
+			}
+
+			while (!file.poll()) {
+				co::yield();
+			}
+
+			arr<byte> file_data = file.getData();
+
+			AssetFile asset;
+			if (!asset.load(file_data)) {
+				err("failed to load asset file %s", fname);
+				return;
+			}
+
+			AssetMesh info = AssetMesh::readInfo(asset);
+			static_assert(sizeof(Vertex) == sizeof(AssetMesh::Vertex));
+
+			arr<Vertex> verts;
+			arr<u32> indices;
+			
+			verts.grow(info.vbuf_size / sizeof(Vertex));
+			indices.grow(info.ibuf_size / info.index_size);
+			
 			if (Mesh *mesh = g_engine->m_meshes.get(name)) {
 				mesh->index_count = (u32)indices.len;
 			}
@@ -146,6 +227,18 @@ bool Mesh::load(const char *fname, StrView name) {
 
 			while (!vrt_buf.isLoaded()) co::yield();
 			while (!ind_buf.isLoaded()) co::yield();
+
+			if (gen_meshlets) {
+				Meshlet meshlet = {};
+				for (u32 index : indices) {
+					meshlet.indices[meshlet.icount++] = index;
+					meshlet.indices[meshlet.vcount++] = index;
+					if (meshlet.icount >= 0 || meshlet.vcount >= 0) {
+
+					}
+					// meshlet[]
+				}
+			}
 
 			info("finished loading model %s", fname.cstr());
 		}
